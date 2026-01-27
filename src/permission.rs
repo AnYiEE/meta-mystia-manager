@@ -1,0 +1,104 @@
+use crate::error::{ManagerError, Result};
+
+use std::env;
+use std::os::windows::process::CommandExt;
+use std::process::Command;
+use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
+use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+struct TokenHandle(HANDLE);
+
+impl TokenHandle {
+    fn new(handle: HANDLE) -> Self {
+        Self(handle)
+    }
+
+    fn raw(&self) -> HANDLE {
+        self.0
+    }
+}
+
+impl Drop for TokenHandle {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = CloseHandle(self.0);
+        }
+    }
+}
+
+/// 检查当前进程是否具有管理员权限
+pub fn is_elevated() -> Result<bool> {
+    unsafe {
+        let mut token: HANDLE = HANDLE::default();
+
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
+            return Ok(false);
+        }
+
+        let token_handle = TokenHandle::new(token);
+
+        let mut elevation = TOKEN_ELEVATION { TokenIsElevated: 0 };
+        let mut return_length = 0u32;
+
+        let result = GetTokenInformation(
+            token_handle.raw(),
+            TokenElevation,
+            Some(&mut elevation as *mut _ as *mut _),
+            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut return_length,
+        );
+
+        if result.is_ok() {
+            Ok(elevation.TokenIsElevated != 0)
+        } else {
+            Ok(false)
+        }
+    }
+}
+
+/// 以管理员权限重新启动程序
+pub fn elevate_and_restart() -> Result<()> {
+    let current_dir = env::current_dir()?;
+    let exe_path = env::current_exe()?;
+
+    // 创建一个临时 PowerShell 脚本来执行 Start-Process -Verb RunAs
+    let escape = |s: &str| s.replace('"', "\"\"");
+    let dir_escaped = escape(&current_dir.display().to_string());
+    let exe_escaped = escape(&exe_path.display().to_string());
+
+    let script = format!(
+        "Start-Process -FilePath \"{}\" -WorkingDirectory \"{}\" -Verb RunAs",
+        exe_escaped, dir_escaped
+    );
+
+    let mut script_path = std::env::temp_dir();
+    script_path.push(format!("meta_mystia_elevate_{}.ps1", std::process::id()));
+
+    std::fs::write(&script_path, script.as_bytes())
+        .map_err(|e| ManagerError::Io(format!("写入提升脚本失败：{}", e)))?;
+
+    // 尝试优先使用 pwsh（PowerShell Core），若不可用再回退到 powershell.exe
+    let shells = ["pwsh.exe", "powershell.exe"];
+
+    for shell in &shells {
+        let res = Command::new(shell)
+            .arg("-NoProfile")
+            .arg("-ExecutionPolicy")
+            .arg("Bypass")
+            .arg("-File")
+            .arg(&script_path)
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn();
+
+        if res.is_ok() {
+            return Ok(());
+        }
+    }
+
+    Err(ManagerError::Other(
+        "无法以管理员身份重新启动（未找到可用的 PowerShell 或启动失败）".to_string(),
+    ))
+}
