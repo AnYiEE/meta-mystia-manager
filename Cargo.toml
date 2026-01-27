@@ -1,0 +1,61 @@
+[package]
+name = "meta-mystia-manager"
+version = "1.0.0"
+authors = ["AnYiEE <i@anyi.in>"]
+edition = "2024"
+description = "A manager for MetaMystia Mod (https://github.com/MetaMikuAI/MetaMystia)."
+license = "AGPL-3.0-only"
+
+[profile.release]
+lto = true
+opt-level = "z"
+
+[dependencies]
+# Windows API
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Console",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+] }
+
+# HTTP 客户端
+reqwest = { version = "0.13", features = [
+  "blocking",
+  "default-tls",
+  "system-proxy",
+], default-features = false }
+
+# URL 编码
+percent-encoding = "2.3"
+
+# 序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# 文件系统操作
+glob = "0.3"
+semver = "1.0"
+
+# ZIP 解压
+zip = "7.2"
+
+# 用户交互
+console = "0.16"
+dialoguer = "0.12"
+indicatif = "0.18"
+
+# 错误处理
+anyhow = "1.0"
+thiserror = "2.0"
+ctrlc = "3.5"
+
+[build-dependencies]
+winres = "0.1"
+
+[[bin]]
+name = "meta-mystia-manager"
+path = "src/main.rs"
