@@ -27,6 +27,8 @@
     "resourceex",
     "serde",
     "SNAPPROCESS",
+    "steamapps",
+    "steamlocate",
     "thiserror",
     "toolhelp",
     "touhou",

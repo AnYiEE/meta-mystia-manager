@@ -40,6 +40,7 @@ impl UninstallMode {
 
 pub const GAME_EXECUTABLE: &str = "Touhou Mystia Izakaya.exe";
 pub const GAME_PROCESS_NAME: &str = "Touhou Mystia Izakaya.exe";
+pub const GAME_STEAM_APP_ID: u32 = 1_584_090;
 
 #[derive(Clone, Copy, Debug)]
 pub struct NetworkRetryConfig {

@@ -33,6 +33,15 @@ pub trait Ui: Send + Sync {
     fn warn(&self, text: &str) -> Result<()>;
     fn error(&self, text: &str) -> Result<()>;
 
+    // 目录相关
+    fn path_display_steam_found(
+        &self,
+        app_id: u32,
+        name: Option<&str>,
+        path: &std::path::Path,
+    ) -> Result<()>;
+    fn path_confirm_use_steam_found(&self) -> Result<bool>;
+
     // 安装相关
     fn install_display_step(&self, step: usize, description: &str);
     fn install_display_version_info(&self, version_info: &VersionInfo);
@@ -185,6 +194,19 @@ impl Ui for ConsoleUI {
         println!();
         println!("{}", style(text).red());
         Ok(())
+    }
+
+    fn path_display_steam_found(
+        &self,
+        app_id: u32,
+        name: Option<&str>,
+        path: &std::path::Path,
+    ) -> Result<()> {
+        path_display_steam_found(app_id, name, path)
+    }
+
+    fn path_confirm_use_steam_found(&self) -> Result<bool> {
+        path_confirm_use_steam_found()
     }
 
     fn install_display_step(&self, step: usize, description: &str) {
@@ -576,6 +598,35 @@ fn wait_for_key() -> Result<()> {
     std::io::stdin().read_line(&mut line)?;
 
     Ok(())
+}
+
+// ==================== 目录相关 UI ====================
+
+fn path_display_steam_found(app_id: u32, name: Option<&str>, path: &std::path::Path) -> Result<()> {
+    println!(
+        "{}",
+        style(format!(
+            "检测到 Steam 上的游戏：{}（AppID {}）",
+            name.unwrap_or("未知"),
+            app_id
+        ))
+        .cyan()
+    );
+    println!("路径：{}", path.display());
+    println!();
+    Ok(())
+}
+
+fn path_confirm_use_steam_found() -> Result<bool> {
+    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(" 是否将此路径作为运行目录并继续？")
+        .default(true)
+        .interact_on_opt(&Term::stdout())?;
+
+    match confirmed {
+        Some(true) => Ok(true),
+        _ => Ok(false),
+    }
 }
 
 // ==================== 安装相关 UI ====================

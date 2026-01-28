@@ -1,7 +1,9 @@
-use crate::config::{GAME_EXECUTABLE, GAME_PROCESS_NAME};
+use crate::config::{GAME_EXECUTABLE, GAME_PROCESS_NAME, GAME_STEAM_APP_ID};
 use crate::error::{ManagerError, Result};
+use crate::ui::Ui;
 
 use std::path::PathBuf;
+use steamlocate::SteamDir;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
@@ -28,15 +30,38 @@ impl Drop for SnapshotHandle {
 }
 
 /// 检查游戏根目录
-pub fn check_game_directory() -> Result<PathBuf> {
-    let current_dir = std::env::current_dir()?;
-
-    let game_exe = current_dir.join(GAME_EXECUTABLE);
-    if !game_exe.is_file() {
-        return Err(ManagerError::GameNotFound);
+pub fn check_game_directory(ui: &dyn Ui) -> Result<PathBuf> {
+    match SteamDir::locate() {
+        Ok(steam_dir) => match steam_dir.find_app(GAME_STEAM_APP_ID) {
+            Ok(Some((app, library))) => {
+                let install_dir = app.install_dir;
+                let candidate = library
+                    .path()
+                    .join("steamapps")
+                    .join("common")
+                    .join(&install_dir);
+                if candidate.join(GAME_EXECUTABLE).is_file() {
+                    ui.path_display_steam_found(app.app_id, app.name.as_deref(), &candidate)?;
+                    if ui.path_confirm_use_steam_found()? {
+                        ui.blank_line()?;
+                        return Ok(candidate);
+                    } else {
+                        ui.blank_line()?;
+                    }
+                }
+            }
+            _ => {}
+        },
+        _ => {}
     }
 
-    Ok(current_dir)
+    let current_dir = std::env::current_dir()?;
+    let game_exe = current_dir.join(GAME_EXECUTABLE);
+    if game_exe.is_file() {
+        return Ok(current_dir);
+    }
+
+    Err(ManagerError::GameNotFound)
 }
 
 /// 检查游戏进程是否正在运行

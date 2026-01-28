@@ -62,7 +62,7 @@ fn run(ui: &dyn Ui) -> Result<()> {
     ui.display_version(manager_version.as_deref())?;
 
     // 2. 目录环境检查
-    let game_root = match check_game_directory() {
+    let game_root = match check_game_directory(ui) {
         Ok(path) => path,
         Err(e) => {
             ui.message(&format!("当前目录：{}", std::env::current_dir()?.display()))?;
