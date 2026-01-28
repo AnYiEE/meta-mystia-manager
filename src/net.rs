@@ -3,7 +3,9 @@ use crate::error::{ManagerError, Result};
 use crate::ui::Ui;
 
 use reqwest::blocking::{Client, Response};
-use reqwest::header::RETRY_AFTER;
+use reqwest::header::{HeaderValue, RETRY_AFTER};
+use serde::de::DeserializeOwned;
+use std::thread::sleep;
 use std::time::Duration;
 
 pub fn with_retry<F, T>(ui: &dyn Ui, op_desc: &str, mut f: F) -> Result<T>
@@ -28,13 +30,7 @@ where
                 ))?;
                 ui.warn(&format!("错误：{}", e))?;
 
-                let sleep_dur = if cfg!(test) {
-                    Duration::from_millis(1)
-                } else {
-                    Duration::from_secs(delay_secs)
-                };
-
-                std::thread::sleep(sleep_dur);
+                sleep(Duration::from_secs(delay_secs));
             }
             Err(e) => return Err(e),
         }
@@ -46,13 +42,35 @@ where
     )))
 }
 
-fn parse_retry_after_seconds(hv: Option<&reqwest::header::HeaderValue>) -> Option<u64> {
+fn parse_retry_after_seconds(hv: Option<&HeaderValue>) -> Option<u64> {
     hv.and_then(|v| v.to_str().ok())
         .and_then(|s| s.trim().parse::<u64>().ok())
 }
 
+fn check_response_status(resp: &Response, ui: &dyn Ui, op_desc: &str) -> Result<()> {
+    if resp.status().is_success() {
+        return Ok(());
+    }
+
+    if resp.status().as_u16() == 429 {
+        let retry_after = parse_retry_after_seconds(resp.headers().get(RETRY_AFTER));
+        if retry_after.map_or(false, |s| s <= 30) {
+            let s = retry_after.unwrap();
+            ui.warn(&format!("检测到限流，Retry-After={} 秒，等待后重试...", s))?;
+            sleep(Duration::from_secs(s));
+        }
+        return Err(ManagerError::RateLimited(op_desc.to_string()));
+    }
+
+    return Err(ManagerError::NetworkError(format!(
+        "{}返回错误：HTTP {}",
+        op_desc,
+        resp.status()
+    )));
+}
+
 /// 使用重试机制获取并解析 JSON 数据
-pub fn get_json_with_retry<T: serde::de::DeserializeOwned>(
+pub fn get_json_with_retry<T: DeserializeOwned>(
     client: &Client,
     ui: &dyn Ui,
     url: &str,
@@ -69,23 +87,7 @@ pub fn get_json_with_retry<T: serde::de::DeserializeOwned>(
             .send()
             .map_err(|e| ManagerError::NetworkError(format!("请求失败：{}", e)))?;
 
-        if !resp.status().is_success() {
-            if resp.status().as_u16() == 429 {
-                if let Some(s) = parse_retry_after_seconds(resp.headers().get(RETRY_AFTER)) {
-                    ui.warn(&format!("检测到限流，Retry-After={} 秒，等待后重试...", s))?;
-                    std::thread::sleep(Duration::from_secs(s));
-                } else {
-                    ui.warn("检测到限流，稍后重试...")?;
-                    std::thread::sleep(Duration::from_secs(5));
-                }
-                return Err(ManagerError::RateLimited(op_desc.to_string()));
-            }
-            return Err(ManagerError::NetworkError(format!(
-                "{}返回错误：HTTP {}",
-                op_desc,
-                resp.status()
-            )));
-        }
+        check_response_status(&resp, ui, op_desc)?;
 
         let text = resp
             .text()
@@ -109,22 +111,7 @@ pub fn get_response_with_retry(
             .send()
             .map_err(|e| ManagerError::NetworkError(format!("请求失败：{}", e)))?;
 
-        if !resp.status().is_success() {
-            if resp.status().as_u16() == 429 {
-                if let Some(s) = parse_retry_after_seconds(resp.headers().get(RETRY_AFTER)) {
-                    ui.warn(&format!("检测到限流，Retry-After={} 秒，等待后重试...", s))?;
-                    std::thread::sleep(Duration::from_secs(s));
-                } else {
-                    std::thread::sleep(Duration::from_secs(5));
-                }
-                return Err(ManagerError::RateLimited(op_desc.to_string()));
-            }
-            return Err(ManagerError::NetworkError(format!(
-                "{}返回错误：HTTP {}",
-                op_desc,
-                resp.status()
-            )));
-        }
+        check_response_status(&resp, ui, op_desc)?;
 
         Ok(resp)
     })
