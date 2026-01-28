@@ -14,6 +14,7 @@ mod uninstaller;
 mod upgrader;
 
 use crate::config::GAME_EXECUTABLE;
+use crate::downloader::Downloader;
 use crate::env_check::{check_game_directory, check_game_running};
 use crate::error::{ManagerError, Result};
 use crate::installer::Installer;
@@ -46,6 +47,18 @@ fn main() -> std::process::ExitCode {
 fn run(ui: &dyn Ui) -> Result<()> {
     // 1. 显示欢迎信息
     ui.display_welcome()?;
+    let mut manager_version: Option<String> = None;
+    if let Ok(downloader) = Downloader::new(ui) {
+        match downloader.get_version_info() {
+            Ok(vi) => {
+                manager_version = Some(vi.manager);
+            }
+            Err(e) => {
+                let _ = ui.message(&format!("无法获取版本信息：{}", e));
+            }
+        }
+    }
+    ui.display_version(manager_version.as_deref())?;
 
     // 2. 目录环境检查
     let game_root = match check_game_directory() {

@@ -10,6 +10,7 @@ use std::fs;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::Mutex;
 use std::time::Duration;
 
 const FILE_API: &str = "https://file.izakaya.cc/api/public/dl";
@@ -26,12 +27,17 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(5); // 连接超时
 pub struct Downloader<'a> {
     client: Client,
     ui: &'a dyn Ui,
+    cached_version: Mutex<Option<VersionInfo>>,
 }
 
 impl<'a> Downloader<'a> {
     pub fn new(ui: &'a dyn Ui) -> Result<Self> {
         let client = Self::build_client(CONNECT_TIMEOUT)?;
-        Ok(Self { client, ui })
+        Ok(Self {
+            client,
+            ui,
+            cached_version: Mutex::new(None),
+        })
     }
 
     fn build_client(connect_timeout: Duration) -> Result<Client> {
@@ -66,7 +72,15 @@ impl<'a> Downloader<'a> {
 
     /// 获取版本信息
     pub fn get_version_info(&self) -> Result<VersionInfo> {
-        self.retry("获取版本信息", || self.try_get_version_info())
+        if let Some(cached) = self.cached_version.lock().unwrap().clone() {
+            return Ok(cached);
+        }
+
+        let vi = self.retry("获取版本信息", || self.try_get_version_info())?;
+        let mut lock = self.cached_version.lock().unwrap();
+        *lock = Some(vi.clone());
+
+        Ok(vi)
     }
 
     fn try_get_version_info(&self) -> Result<VersionInfo> {

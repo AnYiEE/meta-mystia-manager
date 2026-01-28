@@ -6,6 +6,7 @@ use serde::Deserialize;
 pub struct VersionInfo {
     #[serde(rename = "bepInEx")]
     pub bep_in_ex: String,
+    pub manager: String,
     pub dll: String,
     pub zip: String,
 }

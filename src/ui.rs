@@ -21,6 +21,7 @@ pub enum OperationMode {
 /// UI 抽象接口
 pub trait Ui: Send + Sync {
     fn display_welcome(&self) -> Result<()>;
+    fn display_version(&self, manager_version: Option<&str>) -> Result<()>;
     fn display_game_running_warning(&self) -> Result<()>;
     fn select_operation_mode(&self) -> Result<OperationMode>;
 
@@ -144,6 +145,10 @@ impl ConsoleUI {
 impl Ui for ConsoleUI {
     fn display_welcome(&self) -> Result<()> {
         display_welcome()
+    }
+
+    fn display_version(&self, manager_version: Option<&str>) -> Result<()> {
+        display_version(manager_version)
     }
 
     fn display_game_running_warning(&self) -> Result<()> {
@@ -487,6 +492,29 @@ fn display_welcome() -> Result<()> {
         style("MetaMystia Mod 一键安装/升级/卸载工具").cyan().bold(),
         env!("CARGO_PKG_VERSION")
     );
+
+    println!("{}", style("═".repeat(60)).cyan());
+    println!();
+
+    Ok(())
+}
+
+fn display_version(manager_version: Option<&str>) -> Result<()> {
+    if let Some(v) = manager_version {
+        println!();
+        println!("管理工具最新版本：{}", style(v).green());
+        if v != env!("CARGO_PKG_VERSION") {
+            println!(
+                "{}",
+                style("升级提醒：您当前使用的不是最新版本，建议升级至最新版本。").yellow()
+            );
+            println!(
+                "前往下载：https://doc.meta-mystia.izakaya.cc/user_guide/how_to_install.html#onclick_install"
+            );
+        }
+        println!();
+    }
+
     println!("{}", style("═".repeat(60)).cyan());
     println!();
 
