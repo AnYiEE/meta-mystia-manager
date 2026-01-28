@@ -6,8 +6,6 @@ use crate::ui::Ui;
 
 use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
 use reqwest::blocking::{Client, ClientBuilder};
-use std::fs;
-use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Mutex;
@@ -51,11 +49,11 @@ impl<'a> Downloader<'a> {
             .map_err(|e| ManagerError::NetworkError(format!("创建 HTTP 客户端失败：{}", e)))
     }
 
-    fn retry<F, T>(&self, op_desc: &str, mut f: F) -> Result<T>
+    fn retry<F, T>(&self, op_desc: &str, f: F) -> Result<T>
     where
         F: FnMut() -> Result<T>,
     {
-        with_retry(self.ui, op_desc, || f())
+        with_retry(self.ui, op_desc, f)
     }
 
     fn file_api_url(share_code: &str, filename: &str) -> String {
@@ -223,7 +221,7 @@ impl<'a> Downloader<'a> {
         rate_limit: bool,
     ) -> Result<()> {
         if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)
+            std::fs::create_dir_all(parent)
                 .map_err(|e| ManagerError::Io(format!("创建目录失败：{}", e)))?;
         }
 
@@ -234,14 +232,14 @@ impl<'a> Downloader<'a> {
             tmp_path = dest.with_extension(format!("dl.tmp{}", tmp_idx));
         }
 
-        let mut tmp_file = File::create(&tmp_path)
+        let mut tmp_file = std::fs::File::create(&tmp_path)
             .map_err(|e| ManagerError::Io(format!("创建临时文件失败：{}", e)))?;
 
         let buf_len = std::cmp::min(RATE_LIMIT, 8192) as usize;
         let mut buffer = vec![0; buf_len];
         let mut downloaded = 0u64;
 
-        let mut tokens = RATE_LIMIT as f64; // bytes available
+        let mut tokens = RATE_LIMIT as f64;
         let mut last_check = std::time::Instant::now();
 
         loop {
@@ -250,7 +248,7 @@ impl<'a> Downloader<'a> {
             last_check = now;
             tokens += elapsed * RATE_LIMIT as f64;
             if tokens > RATE_LIMIT as f64 {
-                tokens = RATE_LIMIT as f64; // cap burst to RATE_LIMIT
+                tokens = RATE_LIMIT as f64;
             }
 
             let mut to_read = buffer.len();
@@ -297,8 +295,7 @@ impl<'a> Downloader<'a> {
 
         match atomic_rename_or_copy(&tmp_path, dest) {
             Ok(_) => {
-                // best effort: remove tmp if still exists
-                let _ = fs::remove_file(&tmp_path);
+                let _ = std::fs::remove_file(&tmp_path);
                 self.ui.download_finish(
                     id,
                     &format!(
@@ -311,7 +308,7 @@ impl<'a> Downloader<'a> {
                 Ok(())
             }
             Err(e) => {
-                let _ = fs::remove_file(&tmp_path);
+                let _ = std::fs::remove_file(&tmp_path);
                 Err(ManagerError::Io(format!("重命名或复制临时文件失败：{}", e)))
             }
         }

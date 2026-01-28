@@ -3,13 +3,22 @@ use crate::error::ManagerError;
 use crate::ui::Ui;
 
 use glob::glob;
-use std::fs;
 use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
-fn ensure_owner_writable(metadata: &fs::Metadata) -> fs::Permissions {
+#[allow(clippy::permissions_set_readonly_false)]
+fn ensure_owner_writable(metadata: &std::fs::Metadata) -> std::fs::Permissions {
     let mut perms = metadata.permissions();
-    perms.set_readonly(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = perms.mode() | 0o200; // ensure owner write bit set
+        perms.set_mode(mode);
+    }
+    #[cfg(not(unix))]
+    {
+        perms.set_readonly(false);
+    }
     perms
 }
 
@@ -29,20 +38,20 @@ pub fn map_io_error_to_uninstall_error(err: &io::Error, path: &Path) -> ManagerE
 /// 原子重命名或回退到 copy + remove
 pub fn atomic_rename_or_copy(src: &Path, dst: &Path) -> io::Result<()> {
     if let Some(parent) = dst.parent() {
-        fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent)?;
     }
 
-    match fs::rename(src, dst) {
+    match std::fs::rename(src, dst) {
         Ok(_) => Ok(()),
-        Err(rename_err) => match fs::copy(src, dst) {
+        Err(rename_err) => match std::fs::copy(src, dst) {
             Ok(_) => {
-                fs::remove_file(src)?;
+                std::fs::remove_file(src)?;
                 Ok(())
             }
-            Err(copy_err) => Err(io::Error::new(
-                ErrorKind::Other,
-                format!("重命名失败：{}；复制失败：{}", rename_err, copy_err),
-            )),
+            Err(copy_err) => Err(io::Error::other(format!(
+                "重命名失败：{}；复制失败：{}",
+                rename_err, copy_err
+            ))),
         },
     }
 }
@@ -102,9 +111,9 @@ pub fn remove_glob_files(pattern: &Path) -> RemoveGlobResult {
         for entry in entries.flatten() {
             if entry.exists() {
                 let res = if entry.is_dir() {
-                    fs::remove_dir_all(&entry)
+                    std::fs::remove_dir_all(&entry)
                 } else {
-                    fs::remove_file(&entry)
+                    std::fs::remove_file(&entry)
                 };
 
                 match res {
@@ -186,12 +195,10 @@ fn scan_target(
     if path_str.contains('*') {
         if let Ok(entries) = glob(&path_str) {
             for entry in entries.flatten() {
-                if entry.exists() {
-                    if is_directory && entry.is_dir() {
-                        existing_files.push(entry);
-                    } else if !is_directory && entry.is_file() {
-                        existing_files.push(entry);
-                    }
+                if entry.exists()
+                    && ((is_directory && entry.is_dir()) || (!is_directory && entry.is_file()))
+                {
+                    existing_files.push(entry);
                 }
             }
         }
@@ -242,7 +249,7 @@ fn delete_file(path: &Path) -> DeletionResult {
         };
     }
 
-    match fs::remove_file(path) {
+    match std::fs::remove_file(path) {
         Ok(_) => {
             if path.exists() {
                 DeletionResult {
@@ -271,11 +278,11 @@ fn delete_file(path: &Path) -> DeletionResult {
 
             // 若为权限错误，尝试清除只读属性并重试一次
             if e.kind() == ErrorKind::PermissionDenied
-                && let Ok(metadata) = fs::metadata(path)
+                && let Ok(metadata) = std::fs::metadata(path)
             {
                 let perms = ensure_owner_writable(&metadata);
-                let _ = fs::set_permissions(path, perms);
-                if fs::remove_file(path).is_ok() {
+                let _ = std::fs::set_permissions(path, perms);
+                if std::fs::remove_file(path).is_ok() {
                     return DeletionResult {
                         path: path.to_path_buf(),
                         status: DeletionStatus::Success,
@@ -313,7 +320,7 @@ fn delete_directory(path: &Path) -> DeletionResult {
         };
     }
 
-    match fs::remove_dir_all(path) {
+    match std::fs::remove_dir_all(path) {
         Ok(_) => {
             if path.exists() {
                 DeletionResult {
@@ -342,11 +349,11 @@ fn delete_directory(path: &Path) -> DeletionResult {
 
             // 权限错误时尝试清除只读并重试一次
             if e.kind() == ErrorKind::PermissionDenied
-                && let Ok(metadata) = fs::metadata(path)
+                && let Ok(metadata) = std::fs::metadata(path)
             {
                 let perms = ensure_owner_writable(&metadata);
-                let _ = fs::set_permissions(path, perms);
-                if fs::remove_dir_all(path).is_ok() {
+                let _ = std::fs::set_permissions(path, perms);
+                if std::fs::remove_dir_all(path).is_ok() {
                     return DeletionResult {
                         path: path.to_path_buf(),
                         status: DeletionStatus::Success,

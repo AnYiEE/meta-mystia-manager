@@ -1,6 +1,5 @@
 use crate::error::{ManagerError, Result};
 
-use std::env;
 use std::os::windows::process::CommandExt;
 use std::process::Command;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
@@ -47,7 +46,7 @@ pub fn is_elevated() -> Result<bool> {
             token_handle.raw(),
             TokenElevation,
             Some(&mut elevation as *mut _ as *mut _),
-            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            size_of::<TOKEN_ELEVATION>() as u32,
             &mut return_length,
         );
 
@@ -61,8 +60,8 @@ pub fn is_elevated() -> Result<bool> {
 
 /// 以管理员权限重新启动程序
 pub fn elevate_and_restart() -> Result<()> {
-    let current_dir = env::current_dir()?;
-    let exe_path = env::current_exe()?;
+    let current_dir = std::env::current_dir()?;
+    let exe_path = std::env::current_exe()?;
 
     // 创建一个临时 PowerShell 脚本来执行 Start-Process -Verb RunAs
     let escape = |s: &str| s.replace('"', "\"\"");

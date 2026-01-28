@@ -1,7 +1,6 @@
 use crate::config::{GAME_EXECUTABLE, GAME_PROCESS_NAME};
 use crate::error::{ManagerError, Result};
 
-use std::env;
 use std::path::PathBuf;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Diagnostics::ToolHelp::{
@@ -30,7 +29,7 @@ impl Drop for SnapshotHandle {
 
 /// 检查游戏根目录
 pub fn check_game_directory() -> Result<PathBuf> {
-    let current_dir = env::current_dir()?;
+    let current_dir = std::env::current_dir()?;
 
     let game_exe = current_dir.join(GAME_EXECUTABLE);
     if !game_exe.is_file() {
@@ -55,7 +54,7 @@ pub fn check_game_running() -> Result<bool> {
         let snapshot = snapshot_handle.as_raw();
 
         let mut entry = PROCESSENTRY32W {
-            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            dwSize: size_of::<PROCESSENTRY32W>() as u32,
             ..Default::default()
         };
 

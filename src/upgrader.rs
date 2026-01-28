@@ -7,7 +7,6 @@ use crate::temp_dir::create_temp_dir_with_guard;
 use crate::ui::Ui;
 
 use semver::Version;
-use std::fs;
 use std::path::PathBuf;
 
 /// 升级管理器
@@ -152,7 +151,7 @@ impl<'a> Upgrader<'a> {
             }
         };
 
-        // 检查是否已安装 ResourceEx
+        // 检查是否已安装 ResourceExample ZIP
         let resourceex_dir = self.game_root.join("ResourceEx");
         let has_resourceex = resourceex_dir.exists()
             && resourceex_dir.is_dir()
@@ -168,7 +167,7 @@ impl<'a> Upgrader<'a> {
         let new_version = &version_info.dll;
 
         self.ui
-            .upgrade_display_current_and_latest_dll(&current_version, &new_version)?;
+            .upgrade_display_current_and_latest_dll(&current_version, new_version)?;
 
         // 检查 MetaMystia DLL 是否需要升级
         let dll_needs_upgrade = current_version != *new_version;
@@ -209,7 +208,7 @@ impl<'a> Upgrader<'a> {
         // 显示升级信息
         if dll_needs_upgrade {
             self.ui
-                .upgrade_detected_new_dll(&current_version, &new_version)?;
+                .upgrade_detected_new_dll(&current_version, new_version)?;
         } else {
             self.ui.upgrade_dll_already_latest()?;
         }
@@ -268,10 +267,10 @@ impl<'a> Upgrader<'a> {
             let old_dll_pattern = plugins_dir.join("MetaMystia-v*.dll");
             let mut to_backup: Vec<PathBuf> = Vec::new();
             for old_entry in glob_matches(&old_dll_pattern) {
-                if let Some(old_filename) = old_entry.file_name().and_then(|n| n.to_str()) {
-                    if old_filename == filename || old_filename.ends_with(".old") {
-                        continue;
-                    }
+                if let Some(old_filename) = old_entry.file_name().and_then(|n| n.to_str())
+                    && (old_filename == filename || old_filename.ends_with(".old"))
+                {
+                    continue;
                 }
                 to_backup.push(old_entry);
             }
@@ -288,12 +287,12 @@ impl<'a> Upgrader<'a> {
             let new_dll_path = plugins_dir.join(&filename);
 
             if !plugins_dir.exists() {
-                fs::create_dir_all(&plugins_dir)
+                std::fs::create_dir_all(&plugins_dir)
                     .map_err(|e| ManagerError::Io(format!("创建 plugins 目录失败：{}", e)))?;
             }
 
             let tmp_new = new_dll_path.with_extension("dll.tmp");
-            fs::copy(&temp_path, &tmp_new)
+            std::fs::copy(&temp_path, &tmp_new)
                 .map_err(|e| ManagerError::Io(format!("复制临时文件失败：{}", e)))?;
             atomic_rename_or_copy(&tmp_new, &new_dll_path)
                 .map_err(|e| ManagerError::Io(format!("安装新版本失败：{}", e)))?;
@@ -314,10 +313,10 @@ impl<'a> Upgrader<'a> {
             let old_resourceex_pattern = resourceex_dir.join("ResourceExample-v*.zip");
             let mut to_backup: Vec<PathBuf> = Vec::new();
             for old_entry in glob_matches(&old_resourceex_pattern) {
-                if let Some(old_filename) = old_entry.file_name().and_then(|n| n.to_str()) {
-                    if old_filename == filename || old_filename.ends_with(".old") {
-                        continue;
-                    }
+                if let Some(old_filename) = old_entry.file_name().and_then(|n| n.to_str())
+                    && (old_filename == filename || old_filename.ends_with(".old"))
+                {
+                    continue;
                 }
                 to_backup.push(old_entry);
             }
@@ -337,7 +336,7 @@ impl<'a> Upgrader<'a> {
 
             let new_zip_path = resourceex_dir.join(&filename);
             let tmp_new = new_zip_path.with_extension("zip.tmp");
-            fs::copy(&temp_path, &tmp_new)
+            std::fs::copy(&temp_path, &tmp_new)
                 .map_err(|e| ManagerError::Io(format!("复制临时文件失败：{}", e)))?;
             atomic_rename_or_copy(&tmp_new, &new_zip_path)
                 .map_err(|e| ManagerError::Io(format!("安装新版本失败：{}", e)))?;

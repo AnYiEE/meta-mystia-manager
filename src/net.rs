@@ -53,7 +53,7 @@ fn check_response_status(resp: &Response, ui: &dyn Ui, op_desc: &str) -> Result<
 
     if resp.status().as_u16() == 429 {
         let retry_after = parse_retry_after_seconds(resp.headers().get(RETRY_AFTER));
-        if retry_after.map_or(false, |s| s <= 30) {
+        if retry_after.is_some_and(|s| s <= 30) {
             let s = retry_after.unwrap();
             ui.network_rate_limited(s)?;
             sleep(Duration::from_secs(s));
@@ -61,11 +61,11 @@ fn check_response_status(resp: &Response, ui: &dyn Ui, op_desc: &str) -> Result<
         return Err(ManagerError::RateLimited(op_desc.to_string()));
     }
 
-    return Err(ManagerError::NetworkError(format!(
+    Err(ManagerError::NetworkError(format!(
         "{}返回错误：HTTP {}",
         op_desc,
         resp.status()
-    )));
+    )))
 }
 
 /// 使用重试机制获取并解析 JSON 数据

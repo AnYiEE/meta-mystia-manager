@@ -6,7 +6,7 @@ use console::{Term, style};
 use dialoguer::{Confirm, Input, theme::ColorfulTheme};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -53,13 +53,13 @@ pub trait Ui: Send + Sync {
     fn upgrade_resourceex_needs_upgrade(&self) -> Result<()>;
     fn upgrade_downloading_dll(&self) -> Result<()>;
     fn upgrade_downloading_resourceex(&self) -> Result<()>;
-    fn upgrade_install_success(&self, path: &PathBuf) -> Result<()>;
+    fn upgrade_install_success(&self, path: &Path) -> Result<()>;
     fn upgrade_cleanup_start(&self) -> Result<()>;
     fn upgrade_done(&self) -> Result<()>;
     fn upgrade_warn_unparse_version(&self, filename: &str) -> Result<()>;
     fn upgrade_backup_failed(&self, err: &str) -> Result<()>;
-    fn upgrade_deleted(&self, path: &PathBuf) -> Result<()>;
-    fn upgrade_delete_failed(&self, path: &PathBuf, err: &str) -> Result<()>;
+    fn upgrade_deleted(&self, path: &Path) -> Result<()>;
+    fn upgrade_delete_failed(&self, path: &Path, err: &str) -> Result<()>;
     fn upgrade_installing_dll(&self) -> Result<()>;
     fn upgrade_installing_resourceex(&self) -> Result<()>;
     fn upgrade_display_resourceex_versions(&self, current: &str, latest: &str) -> Result<()>;
@@ -81,7 +81,7 @@ pub trait Ui: Send + Sync {
     fn uninstall_restarting_elevated(&self) -> Result<()>;
     fn uninstall_retrying_failed_items(&self) -> Result<()>;
 
-    // 删除进度相关
+    // 删除相关
     fn deletion_display_progress(&self, current: usize, total: usize, path: &str);
     fn deletion_display_success(&self, path: &str);
     fn deletion_display_failure(&self, path: &str, error: &str);
@@ -251,7 +251,7 @@ impl Ui for ConsoleUI {
         upgrade_downloading_resourceex()
     }
 
-    fn upgrade_install_success(&self, path: &PathBuf) -> Result<()> {
+    fn upgrade_install_success(&self, path: &Path) -> Result<()> {
         upgrade_install_success(path)
     }
 
@@ -271,11 +271,11 @@ impl Ui for ConsoleUI {
         upgrade_backup_failed(err)
     }
 
-    fn upgrade_deleted(&self, path: &PathBuf) -> Result<()> {
+    fn upgrade_deleted(&self, path: &Path) -> Result<()> {
         upgrade_deleted(path)
     }
 
-    fn upgrade_delete_failed(&self, path: &PathBuf, err: &str) -> Result<()> {
+    fn upgrade_delete_failed(&self, path: &Path, err: &str) -> Result<()> {
         upgrade_delete_failed(path, err)
     }
 
@@ -557,7 +557,7 @@ fn select_operation_mode() -> Result<OperationMode> {
 }
 
 fn blank_line() -> Result<()> {
-    println!("");
+    println!();
     Ok(())
 }
 
@@ -710,7 +710,7 @@ fn upgrade_downloading_resourceex() -> Result<()> {
     Ok(())
 }
 
-fn upgrade_install_success(path: &PathBuf) -> Result<()> {
+fn upgrade_install_success(path: &Path) -> Result<()> {
     println!("安装成功：{}", path.display());
     Ok(())
 }
@@ -736,12 +736,12 @@ fn upgrade_backup_failed(err: &str) -> Result<()> {
     Ok(())
 }
 
-fn upgrade_deleted(path: &PathBuf) -> Result<()> {
+fn upgrade_deleted(path: &Path) -> Result<()> {
     println!("已删除：{}", path.display());
     Ok(())
 }
 
-fn upgrade_delete_failed(path: &PathBuf, err: &str) -> Result<()> {
+fn upgrade_delete_failed(path: &Path, err: &str) -> Result<()> {
     println!(
         "{}",
         style(format!("删除失败：{}（{}）", path.display(), err)).yellow()
@@ -980,9 +980,8 @@ fn download_share_code_failed(err: &str) -> Result<()> {
     Ok(())
 }
 
-// ==================== 删除进度相关 UI ====================
+// ==================== 删除相关 UI ====================
 
-/// 显示删除进度
 fn deletion_display_progress(current: usize, total: usize, path: &str) {
     println!(
         "{} [{}/{}] {}",
@@ -993,12 +992,10 @@ fn deletion_display_progress(current: usize, total: usize, path: &str) {
     );
 }
 
-/// 显示删除成功
 fn deletion_display_success(path: &str) {
     println!("  {} {}", style("✔ ").green(), style(path).dim());
 }
 
-/// 显示删除失败
 fn deletion_display_failure(path: &str, error: &str) {
     println!(
         "  {} {} - {}",
@@ -1008,12 +1005,10 @@ fn deletion_display_failure(path: &str, error: &str) {
     );
 }
 
-/// 显示删除跳过
 fn deletion_display_skipped(path: &str) {
     println!("  {} {}", style("○ ").dim(), style(path).dim());
 }
 
-/// 显示操作摘要
 fn deletion_display_summary(success_count: usize, failed_count: usize, skipped_count: usize) {
     println!();
     println!("删除成功：{} 项", style(success_count).green());

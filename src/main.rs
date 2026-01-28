@@ -24,22 +24,23 @@ use crate::uninstaller::Uninstaller;
 use crate::upgrader::Upgrader;
 
 use std::path::PathBuf;
+use std::process::ExitCode;
 
-fn main() -> std::process::ExitCode {
+fn main() -> ExitCode {
     let console_ui = ConsoleUI::new();
 
     if !cfg!(windows) {
         let _ = console_ui.error("错误：仅支持 Windows 平台");
         console_ui.wait_for_key().ok();
-        return std::process::ExitCode::from(1);
+        return ExitCode::from(1);
     }
 
     match run(&console_ui) {
-        Ok(()) => std::process::ExitCode::SUCCESS,
+        Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             let _ = console_ui.error(&format!("错误：{}", e));
             console_ui.wait_for_key().ok();
-            std::process::ExitCode::from(1)
+            ExitCode::from(1)
         }
     }
 }
@@ -91,7 +92,7 @@ fn run(ui: &dyn Ui) -> Result<()> {
 
 fn run_install(game_root: PathBuf, ui: &dyn Ui) -> Result<()> {
     // 创建安装器
-    let installer = Installer::new(game_root.clone(), ui)?;
+    let installer = Installer::new(game_root, ui)?;
 
     // 检查是否已安装组件
     let bepinex_installed = installer.check_bepinex_installed();

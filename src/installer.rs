@@ -7,7 +7,6 @@ use crate::temp_dir::create_temp_dir_with_guard;
 use crate::ui::Ui;
 
 use std::collections::HashSet;
-use std::fs;
 use std::path::PathBuf;
 
 /// 安装管理器
@@ -74,7 +73,9 @@ impl<'a> Installer<'a> {
         // 1. 删除 BepInEx 目录下的所有项目（跳过 plugins）
         let bepinex_dir = game_root.join("BepInEx");
         if bepinex_dir.exists() {
-            for entry in fs::read_dir(&bepinex_dir).map_err(|e| ManagerError::Io(e.to_string()))? {
+            for entry in
+                std::fs::read_dir(&bepinex_dir).map_err(|e| ManagerError::Io(e.to_string()))?
+            {
                 let entry = entry.map_err(|e| ManagerError::Io(e.to_string()))?;
                 let path = entry.path();
                 let name = entry.file_name();
@@ -96,7 +97,7 @@ impl<'a> Installer<'a> {
             }
         }
 
-        // 3. 删除 ResourceEx 目录中的 ResourceExample ZIP 文件
+        // 3. 删除 ResourceEx 目录中的 ResourceExample ZIP
         let resourceex_dir = game_root.join("ResourceEx");
         if resourceex_dir.exists() {
             let resourceex_pattern = resourceex_dir.join("ResourceExample-v*.zip");

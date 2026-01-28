@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, Once, OnceLock};
 
@@ -24,7 +23,7 @@ impl DirGuard {
 impl Drop for DirGuard {
     fn drop(&mut self) {
         if self.path.exists() {
-            let _ = fs::remove_dir_all(&self.path);
+            let _ = std::fs::remove_dir_all(&self.path);
         }
         unregister_temp_dir(&self.path);
     }
@@ -32,7 +31,7 @@ impl Drop for DirGuard {
 
 fn cleanup_temp_dir(temp_dir: &Path) -> std::io::Result<()> {
     if temp_dir.exists() {
-        fs::remove_dir_all(temp_dir)?;
+        std::fs::remove_dir_all(temp_dir)?;
     }
     Ok(())
 }
@@ -51,7 +50,7 @@ fn register_temp_dir_for_cleanup(path: PathBuf) -> std::io::Result<()> {
         let _ = ctrlc::set_handler(move || {
             let guard = m_ref.lock().unwrap();
             for p in guard.iter() {
-                let _ = fs::remove_dir_all(p);
+                let _ = std::fs::remove_dir_all(p);
             }
             std::process::exit(0);
         });
@@ -69,7 +68,7 @@ fn register_temp_dir_for_cleanup(path: PathBuf) -> std::io::Result<()> {
                     if let Some(m) = GLOBAL_TEMP_DIRS.get() {
                         let guard = m.lock().unwrap();
                         for p in guard.iter() {
-                            let _ = fs::remove_dir_all(p);
+                            let _ = std::fs::remove_dir_all(p);
                         }
                     }
                     1
@@ -114,7 +113,7 @@ pub fn create_temp_dir_with_guard(base: &Path) -> std::io::Result<(PathBuf, DirG
         let _ = cleanup_temp_dir(&temp_dir);
     }
 
-    fs::create_dir_all(&temp_dir)?;
+    std::fs::create_dir_all(&temp_dir)?;
 
     Ok((temp_dir.clone(), DirGuard::new(temp_dir)))
 }
