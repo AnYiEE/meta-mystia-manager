@@ -15,6 +15,10 @@ impl DirGuard {
         let _ = register_temp_dir_for_cleanup(path.clone());
         Self { path }
     }
+
+    pub fn from_existing(path: PathBuf) -> Self {
+        Self { path }
+    }
 }
 
 impl Drop for DirGuard {
@@ -37,7 +41,9 @@ fn register_temp_dir_for_cleanup(path: PathBuf) -> std::io::Result<()> {
     let m = GLOBAL_TEMP_DIRS.get_or_init(|| Mutex::new(Vec::new()));
     {
         let mut v = m.lock().unwrap();
-        v.push(path.clone());
+        if !v.contains(&path) {
+            v.push(path.clone());
+        }
     }
 
     SET_CTRL_HANDLER.call_once(|| {
@@ -96,6 +102,13 @@ fn unregister_temp_dir(path: &Path) {
 
 pub fn create_temp_dir_with_guard(base: &Path) -> std::io::Result<(PathBuf, DirGuard)> {
     let temp_dir = base.join(".meta-mystia-tmp");
+
+    if let Some(m) = GLOBAL_TEMP_DIRS.get() {
+        let guard = m.lock().unwrap();
+        if guard.contains(&temp_dir) {
+            return Ok((temp_dir.clone(), DirGuard::from_existing(temp_dir)));
+        }
+    }
 
     if temp_dir.exists() {
         let _ = cleanup_temp_dir(&temp_dir);
