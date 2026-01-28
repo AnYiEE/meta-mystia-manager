@@ -29,6 +29,7 @@
     "thiserror",
     "toolhelp",
     "touhou",
+    "unparse",
     "upgrader",
     "winhttp",
     "winres"

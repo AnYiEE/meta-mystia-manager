@@ -211,7 +211,7 @@ pub fn execute_deletion(files: &[PathBuf], ui: &dyn Ui) -> Vec<DeletionResult> {
     let _ = ui.message("");
 
     for (index, path) in files.iter().enumerate() {
-        ui.display_deletion_progress(index + 1, total, &path.to_string_lossy());
+        ui.deletion_display_progress(index + 1, total, &path.to_string_lossy());
 
         let result = if path.is_dir() {
             delete_directory(path)
@@ -220,11 +220,11 @@ pub fn execute_deletion(files: &[PathBuf], ui: &dyn Ui) -> Vec<DeletionResult> {
         };
 
         match &result.status {
-            DeletionStatus::Success => ui.display_success(&path.to_string_lossy()),
+            DeletionStatus::Success => ui.deletion_display_success(&path.to_string_lossy()),
             DeletionStatus::Failed(error) => {
-                ui.display_failure(&path.to_string_lossy(), &error.to_string())
+                ui.deletion_display_failure(&path.to_string_lossy(), &error.to_string())
             }
-            DeletionStatus::Skipped => ui.display_skipped(&path.to_string_lossy()),
+            DeletionStatus::Skipped => ui.deletion_display_skipped(&path.to_string_lossy()),
         }
 
         results.push(result);

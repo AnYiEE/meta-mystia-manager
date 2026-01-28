@@ -70,10 +70,10 @@ impl<'a> Downloader<'a> {
     }
 
     fn try_get_version_info(&self) -> Result<VersionInfo> {
-        self.ui.message("正在获取版本信息...")?;
+        self.ui.download_version_info_start()?;
 
         let response = self.client.get(VERSION_API).send().map_err(|e| {
-            let _ = self.ui.warn(&format!("获取版本信息失败：{}", e));
+            let _ = self.ui.download_version_info_failed(&format!("{}", e));
             let base_msg = if e.is_timeout() {
                 "请求超时".to_string()
             } else if e.is_connect() {
@@ -98,7 +98,7 @@ impl<'a> Downloader<'a> {
             )));
         }
 
-        self.ui.message("获取版本信息成功")?;
+        self.ui.download_version_info_success()?;
 
         let text = response
             .text()
@@ -106,10 +106,9 @@ impl<'a> Downloader<'a> {
 
         serde_json::from_str(&text).map_err(|e| {
             let snippet: String = text.chars().take(200).collect();
-            let _ = self.ui.warn(&format!(
-                "版本信息 JSON 解析失败：{}, response snippet：{}",
-                e, snippet
-            ));
+            let _ = self
+                .ui
+                .download_version_info_parse_failed(&format!("{}", e), &snippet);
             ManagerError::Other(format!("解析版本信息失败：{}", e))
         })
     }
@@ -120,10 +119,10 @@ impl<'a> Downloader<'a> {
     }
 
     fn try_get_share_code(&self) -> Result<String> {
-        self.ui.message("正在获取下载链接...")?;
+        self.ui.download_share_code_start()?;
 
         let response = self.client.get(REDIRECT_URL).send().map_err(|e| {
-            let _ = self.ui.warn(&format!("获取下载链接失败：{}", e));
+            let _ = self.ui.download_share_code_failed(&format!("{}", e));
             let base_msg = if e.is_timeout() {
                 "请求超时".to_string()
             } else if e.is_connect() {
@@ -148,7 +147,7 @@ impl<'a> Downloader<'a> {
             )));
         }
 
-        self.ui.message("获取下载链接成功")?;
+        self.ui.download_share_code_success()?;
 
         let final_url = response.url().as_str();
         Self::parse_share_code_from_url(final_url)
@@ -305,7 +304,7 @@ impl<'a> Downloader<'a> {
     }
 
     fn get_dll_download_url_from_github(&self) -> Result<String> {
-        self.ui.message("尝试从 GitHub 下载 MetaMystia DLL...")?;
+        self.ui.download_attempt_github_dll()?;
 
         let json: serde_json::Value = get_json_with_retry(
             &self.client,
@@ -324,7 +323,7 @@ impl<'a> Downloader<'a> {
                     (Some(name), Some(url))
                         if name.starts_with("MetaMystia-v") && name.ends_with(".dll") =>
                     {
-                        self.ui.message(&format!("找到文件：{}", name))?;
+                        self.ui.download_found_github_asset(name)?;
                         return Ok(url.to_string());
                     }
                     _ => {}
@@ -332,7 +331,7 @@ impl<'a> Downloader<'a> {
             }
         }
 
-        self.ui.warn("未找到 MetaMystia DLL 文件")?;
+        self.ui.download_github_dll_not_found()?;
         Err(ManagerError::NetworkError(
             "未找到 MetaMystia DLL 文件".to_string(),
         ))
@@ -348,12 +347,11 @@ impl<'a> Downloader<'a> {
         match self.get_dll_download_url_from_github() {
             Ok(url) => {
                 if let Err(e) = self.download_file_with_progress(&url, dest, None, false) {
-                    self.ui.message("")?;
-                    self.ui.warn(&format!(
+                    self.ui.download_switch_to_fallback(&format!(
                         "从 GitHub 下载 MetaMystia DLL 失败：{}，切换到备用源...",
                         e
                     ))?;
-                    self.ui.message("尝试从备用源下载 MetaMystia DLL...")?;
+                    self.ui.download_try_fallback_metamystia()?;
                     let filename = version_info.metamystia_filename();
                     let fallback_url = Self::file_api_url(share_code, &filename);
                     self.download_file_with_progress(&fallback_url, dest, None, true)
@@ -362,10 +360,10 @@ impl<'a> Downloader<'a> {
                 }
             }
             Err(_) => {
-                self.ui.message("")?;
-                self.ui
-                    .warn("从 GitHub 获取 MetaMystia DLL 下载链接失败，切换到备用源...")?;
-                self.ui.message("尝试从备用源下载 MetaMystia DLL...")?;
+                self.ui.download_switch_to_fallback(
+                    "从 GitHub 获取 MetaMystia DLL 下载链接失败，切换到备用源...",
+                )?;
+                self.ui.download_try_fallback_metamystia()?;
                 let filename = version_info.metamystia_filename();
                 let url = Self::file_api_url(share_code, &filename);
                 self.download_file_with_progress(&url, dest, None, true)
@@ -380,8 +378,7 @@ impl<'a> Downloader<'a> {
         version_info: &VersionInfo,
         dest: &Path,
     ) -> Result<()> {
-        self.ui.message("")?;
-        self.ui.message("下载 ResourceExample ZIP...")?;
+        self.ui.download_resourceex_start()?;
         let filename = version_info.resourceex_filename();
         let url = Self::file_api_url(share_code, &filename);
         self.download_file_with_progress(&url, dest, None, true)
@@ -399,7 +396,7 @@ impl<'a> Downloader<'a> {
 
         let primary_url = format!("{}/{}/{}", BEPINEX_PRIMARY, version, filename);
 
-        self.ui.message("尝试从 bepinex.dev 下载 BepInEx...")?;
+        self.ui.download_bepinex_attempt_primary()?;
 
         let primary_result =
             get_response_with_retry(&self.client, self.ui, &primary_url, "请求 BepInEx 主源");
@@ -411,8 +408,10 @@ impl<'a> Downloader<'a> {
 
                 if let Err(e) = self.write_response_to_file(&mut resp, dest, id, false) {
                     self.ui.download_finish(id, "从 bepinex.dev 下载失败");
-                    self.ui
-                        .warn(&format!("从 bepinex.dev 下载失败 ({}), 切换到备用源...", e))?;
+                    self.ui.download_bepinex_primary_failed(&format!(
+                        "从 bepinex.dev 下载失败 ({}), 切换到备用源...",
+                        e
+                    ))?;
                     let share_code = self.get_share_code()?;
                     let fallback_url = Self::file_api_url(&share_code, &filename_with_version);
                     return self.download_file_with_progress(&fallback_url, dest, None, true);
@@ -421,8 +420,9 @@ impl<'a> Downloader<'a> {
                 Ok(())
             }
             Err(_) => {
-                self.ui
-                    .warn("从 bepinex.dev 下载失败或超时，切换到备用源...")?;
+                self.ui.download_bepinex_primary_failed(
+                    "从 bepinex.dev 下载失败或超时，切换到备用源...",
+                )?;
                 let share_code = self.get_share_code()?;
                 let fallback_url = Self::file_api_url(&share_code, &filename_with_version);
                 self.download_file_with_progress(&fallback_url, dest, None, true)

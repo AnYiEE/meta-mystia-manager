@@ -13,6 +13,7 @@ mod ui;
 mod uninstaller;
 mod upgrader;
 
+use crate::config::GAME_EXECUTABLE;
 use crate::env_check::{check_game_directory, check_game_running};
 use crate::error::{ManagerError, Result};
 use crate::installer::Installer;
@@ -51,7 +52,10 @@ fn run(ui: &dyn Ui) -> Result<()> {
         Ok(path) => path,
         Err(e) => {
             ui.message(&format!("当前目录：{}", std::env::current_dir()?.display()))?;
-            ui.message("请在游戏根目录（包含 Touhou Mystia Izakaya.exe 的文件夹）下运行本程序。")?;
+            ui.message(&format!(
+                "请在游戏根目录（包含 {} 的文件夹）下运行本程序。",
+                GAME_EXECUTABLE
+            ))?;
             return Err(e);
         }
     };
@@ -104,7 +108,7 @@ fn run_install(game_root: PathBuf, ui: &dyn Ui) -> Result<()> {
         ui.message("  • 安装最新版本的 BepInEx 和 MetaMystia 相关文件")?;
         ui.message("")?;
 
-        let confirmed = ui.confirm_overwrite()?;
+        let confirmed = ui.install_confirm_overwrite()?;
         if !confirmed {
             return Err(ManagerError::UserCancelled);
         }

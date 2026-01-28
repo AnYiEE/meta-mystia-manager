@@ -30,8 +30,10 @@ impl UninstallMode {
 
     pub fn description(&self) -> &str {
         match self {
-            UninstallMode::Light => "仅移除 MetaMystia 相关文件（保留 BepInEx 框架）",
-            UninstallMode::Full => "移除和 Mod 有关的所有文件（还原为原版游戏）",
+            UninstallMode::Light => {
+                "仅移除 MetaMystia 相关文件（保留 BepInEx 框架和其他 Mod 相关文件）"
+            }
+            UninstallMode::Full => "移除所有和 Mod 有关的文件（还原为原版游戏）",
         }
     }
 }

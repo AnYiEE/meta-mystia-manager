@@ -21,14 +21,13 @@ where
                 let raw = (cfg.base_delay_secs as f64) * cfg.multiplier.powi(attempt as i32);
                 let delay_secs = raw.min(cfg.max_delay_secs as f64).ceil() as u64;
 
-                ui.warn(&format!(
-                    "{}失败，{} 秒后重试...（重试 {}/{}）",
+                ui.network_retrying(
                     op_desc,
                     delay_secs,
                     attempt + 1,
-                    cfg.attempts
-                ))?;
-                ui.warn(&format!("错误：{}", e))?;
+                    cfg.attempts,
+                    &format!("{}", e),
+                )?;
 
                 sleep(Duration::from_secs(delay_secs));
             }
@@ -56,7 +55,7 @@ fn check_response_status(resp: &Response, ui: &dyn Ui, op_desc: &str) -> Result<
         let retry_after = parse_retry_after_seconds(resp.headers().get(RETRY_AFTER));
         if retry_after.map_or(false, |s| s <= 30) {
             let s = retry_after.unwrap();
-            ui.warn(&format!("检测到限流，Retry-After={} 秒，等待后重试...", s))?;
+            ui.network_rate_limited(s)?;
             sleep(Duration::from_secs(s));
         }
         return Err(ManagerError::RateLimited(op_desc.to_string()));

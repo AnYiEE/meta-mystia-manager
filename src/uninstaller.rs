@@ -22,23 +22,21 @@ impl<'a> Uninstaller<'a> {
     /// 执行卸载流程
     pub fn uninstall(&self) -> Result<()> {
         // 1. 选择卸载模式
-        let mode = self.ui.select_uninstall_mode()?;
+        let mode = self.ui.uninstall_select_mode()?;
 
         // 2. 扫描实际存在的文件（相对于游戏目录）
         let existing_files = scan_existing_files(&self.game_root, mode);
 
         if existing_files.is_empty() {
-            self.ui.message("")?;
-            self.ui
-                .message("未找到需要删除的文件，可能已经卸载完成。")?;
+            self.ui.uninstall_no_files_found()?;
             return Ok(());
         }
 
         // 3. 显示将要删除的文件列表
-        self.ui.display_target_files(&existing_files)?;
+        self.ui.uninstall_display_target_files(&existing_files)?;
 
         // 4. 确认删除
-        if !self.ui.confirm_deletion()? {
+        if !self.ui.uninstall_confirm_deletion()? {
             return Err(ManagerError::UserCancelled);
         }
 
@@ -76,9 +74,7 @@ impl<'a> Uninstaller<'a> {
             }
 
             if !in_use_failures.is_empty() {
-                self.ui.warn(
-                    "部分文件被占用，请关闭相关程序后重试。正在短暂等待并自动重试这些文件...",
-                )?;
+                self.ui.uninstall_files_in_use_warning()?;
 
                 let cfg = uninstall_retry_config();
                 let mut still_in_use = in_use_failures.clone();
@@ -91,12 +87,8 @@ impl<'a> Uninstaller<'a> {
                     let raw = (cfg.base_delay_secs as f64) * cfg.multiplier.powi(attempt as i32);
                     let delay_secs = raw.min(cfg.max_delay_secs as f64).ceil() as u64;
 
-                    self.ui.message(&format!(
-                        "等待 {} 秒后重试被占用文件（重试 {}/{}）...",
-                        delay_secs,
-                        attempt + 1,
-                        cfg.attempts
-                    ))?;
+                    self.ui
+                        .uninstall_wait_before_retry(delay_secs, attempt + 1, cfg.attempts)?;
 
                     std::thread::sleep(std::time::Duration::from_secs(delay_secs));
 
@@ -133,19 +125,17 @@ impl<'a> Uninstaller<'a> {
                 )
             });
 
-            if has_permission_issue && !is_elevated && self.ui.ask_elevate_permission()? {
+            if has_permission_issue && !is_elevated && self.ui.uninstall_ask_elevate_permission()? {
                 elevate_and_restart()?;
-                self.ui.message("")?;
-                self.ui.message("正在以管理员权限重新启动...")?;
+                self.ui.uninstall_restarting_elevated()?;
                 std::process::exit(0);
             }
 
-            if !self.ui.ask_retry_failures()? {
+            if !self.ui.uninstall_ask_retry_failures()? {
                 break;
             }
 
-            self.ui.message("")?;
-            self.ui.message("正在重试失败的项目...")?;
+            self.ui.uninstall_retrying_failed_items()?;
 
             use std::collections::HashSet;
             let mut seen = HashSet::new();
@@ -174,7 +164,7 @@ impl<'a> Uninstaller<'a> {
 
         // 8. 显示操作摘要
         let (success, failed, skipped) = count_results(&all_results);
-        self.ui.display_summary(success, failed, skipped);
+        self.ui.deletion_display_summary(success, failed, skipped);
 
         Ok(())
     }

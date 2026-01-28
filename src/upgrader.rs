@@ -52,7 +52,7 @@ impl<'a> Upgrader<'a> {
                 if let Some(v) = Self::parse_version(filename, "MetaMystia-v", ".dll") {
                     parsed.push((v, path.clone()));
                 } else {
-                    self.ui.warn(&format!("无法解析版本：{}", filename))?;
+                    self.ui.upgrade_warn_unparse_version(filename)?;
                     unparsed.push(path.clone());
                 }
             }
@@ -79,7 +79,7 @@ impl<'a> Upgrader<'a> {
             for res in results {
                 match res {
                     Ok(_backup) => (),
-                    Err(e) => self.ui.warn(&format!("备份失败：{}", e))?,
+                    Err(e) => self.ui.upgrade_backup_failed(&format!("{}", e))?,
                 }
             }
         } else {
@@ -102,7 +102,7 @@ impl<'a> Upgrader<'a> {
             for res in results {
                 match res {
                     Ok(_backup) => (),
-                    Err(e) => self.ui.warn(&format!("备份失败：{}", e))?,
+                    Err(e) => self.ui.upgrade_backup_failed(&format!("{}", e))?,
                 }
             }
         }
@@ -116,11 +116,10 @@ impl<'a> Upgrader<'a> {
             let pattern = plugins_dir.join("MetaMystia-v*.dll.old*");
             let result = remove_glob_files(&pattern);
             for removed in result.removed.iter() {
-                self.ui.message(&format!("已删除：{}", removed.display()))?;
+                self.ui.upgrade_deleted(removed)?;
             }
             for (path, err) in result.failed.into_iter() {
-                self.ui
-                    .warn(&format!("删除失败：{}（{}）", path.display(), err))?;
+                self.ui.upgrade_delete_failed(&path, &format!("{}", err))?;
             }
         }
 
@@ -129,11 +128,10 @@ impl<'a> Upgrader<'a> {
             let pattern = resourceex_dir.join("ResourceExample-v*.zip.old*");
             let result = remove_glob_files(&pattern);
             for removed in result.removed.iter() {
-                self.ui.message(&format!("已删除：{}", removed.display()))?;
+                self.ui.upgrade_deleted(removed)?;
             }
             for (path, err) in result.failed.into_iter() {
-                self.ui
-                    .warn(&format!("删除失败：{}（{}）", path.display(), err))?;
+                self.ui.upgrade_delete_failed(&path, &format!("{}", err))?;
             }
         }
 
@@ -143,8 +141,7 @@ impl<'a> Upgrader<'a> {
     /// 执行升级
     pub fn upgrade(&self) -> Result<()> {
         // 1. 查找当前安装的版本
-        self.ui.message("")?;
-        self.ui.message("正在检查当前安装的版本...")?;
+        self.ui.upgrade_checking_installed_version()?;
 
         let (current_version, _current_dll_path) = match self.consolidate_installed_dlls()? {
             Some((version, path)) => (version, path),
@@ -162,19 +159,16 @@ impl<'a> Upgrader<'a> {
             && !glob_matches(&resourceex_dir.join("ResourceExample-v*.zip")).is_empty();
 
         if has_resourceex {
-            self.ui.message("检测到已安装 ResourceExample ZIP")?;
+            self.ui.upgrade_detected_resourceex()?;
         }
 
         // 2. 获取最新版本信息
-        self.ui.message("")?;
+        self.ui.blank_line()?;
         let version_info = self.downloader.get_version_info()?;
         let new_version = &version_info.dll;
 
-        self.ui.message("")?;
         self.ui
-            .message(&format!("当前 MetaMystia DLL 版本：v{}", current_version))?;
-        self.ui
-            .message(&format!("最新 MetaMystia DLL 版本：v{}", new_version))?;
+            .upgrade_display_current_and_latest_dll(&current_version, &new_version)?;
 
         // 检查 MetaMystia DLL 是否需要升级
         let dll_needs_upgrade = current_version != *new_version;
@@ -202,41 +196,38 @@ impl<'a> Upgrader<'a> {
 
             if let Some(current_ver) = current_resourceex_version {
                 self.ui
-                    .message(&format!("当前 ResourceExample ZIP 版本：v{}", current_ver))?;
-                self.ui.message(&format!(
-                    "最新 ResourceExample ZIP 版本：v{}",
-                    version_info.zip
-                ))?;
+                    .upgrade_display_resourceex_versions(&current_ver, &version_info.zip)?;
                 resourceex_needs_upgrade = current_ver != version_info.zip;
             }
         }
 
         if !dll_needs_upgrade && !resourceex_needs_upgrade {
-            self.ui.message("")?;
-            self.ui.message("✔  已是最新版本，无需升级！")?;
+            self.ui.upgrade_no_update_needed()?;
             return Ok(());
         }
 
         // 显示升级信息
-        self.ui.message("")?;
         if dll_needs_upgrade {
-            self.ui.message(&format!(
-                "发现新版本 MetaMystia DLL：v{} -> v{}",
-                current_version, new_version
-            ))?;
+            self.ui
+                .upgrade_detected_new_dll(&current_version, &new_version)?;
         } else {
-            self.ui.message("MetaMystia DLL 已是最新版本")?;
+            self.ui.upgrade_dll_already_latest()?;
         }
         if resourceex_needs_upgrade {
-            self.ui.message("ResourceExample ZIP 需要升级")?;
+            self.ui.upgrade_resourceex_needs_upgrade()?;
+        }
+        if dll_needs_upgrade && !resourceex_needs_upgrade {
+            self.ui.blank_line()?;
         }
 
         // 3. 获取分享码
         let share_code = self.downloader.get_share_code()?;
 
         // 4. 下载新版本
-        self.ui.message("")?;
-        self.ui.message("正在下载 MetaMystia DLL...")?;
+
+        if dll_needs_upgrade {
+            self.ui.upgrade_downloading_dll()?;
+        }
 
         let (temp_dir, _temp_guard) = create_temp_dir_with_guard(&self.game_root)
             .map_err(|e| ManagerError::Io(format!("创建临时目录失败：{}", e)))?;
@@ -259,8 +250,7 @@ impl<'a> Upgrader<'a> {
             let resourceex_filename = version_info.resourceex_filename();
             let path = temp_dir.join(&resourceex_filename);
 
-            self.ui.message("")?;
-            self.ui.message("正在下载 ResourceExample ZIP...")?;
+            self.ui.upgrade_downloading_resourceex()?;
 
             self.downloader
                 .download_resourceex(&share_code, &version_info, &path)?;
@@ -289,12 +279,11 @@ impl<'a> Upgrader<'a> {
             for res in backup_paths_with_index(&to_backup, "dll.old") {
                 match res {
                     Ok(backup_path) => backup_paths.push(backup_path),
-                    Err(e) => self.ui.warn(&format!("备份失败：{}", e))?,
+                    Err(e) => self.ui.upgrade_backup_failed(&format!("{}", e))?,
                 }
             }
 
-            self.ui.message("")?;
-            self.ui.message("正在安装 MetaMystia DLL...")?;
+            self.ui.upgrade_installing_dll()?;
 
             let new_dll_path = plugins_dir.join(&filename);
 
@@ -309,8 +298,7 @@ impl<'a> Upgrader<'a> {
             atomic_rename_or_copy(&tmp_new, &new_dll_path)
                 .map_err(|e| ManagerError::Io(format!("安装新版本失败：{}", e)))?;
 
-            self.ui
-                .message(&format!("安装成功：{}", new_dll_path.display()))?;
+            self.ui.upgrade_install_success(&new_dll_path)?;
 
             if backup_paths.is_empty() {
                 None
@@ -337,12 +325,15 @@ impl<'a> Upgrader<'a> {
             for res in backup_paths_with_index(&to_backup, "zip.old") {
                 match res {
                     Ok(_) => (),
-                    Err(e) => self.ui.warn(&format!("备份失败：{}", e))?,
+                    Err(e) => self.ui.upgrade_backup_failed(&format!("{}", e))?,
                 }
             }
 
-            self.ui.message("")?;
-            self.ui.message("正在安装 ResourceExample ZIP...")?;
+            if !dll_needs_upgrade {
+                self.ui.blank_line()?;
+                self.ui.blank_line()?;
+            }
+            self.ui.upgrade_installing_resourceex()?;
 
             let new_zip_path = resourceex_dir.join(&filename);
             let tmp_new = new_zip_path.with_extension("zip.tmp");
@@ -351,17 +342,14 @@ impl<'a> Upgrader<'a> {
             atomic_rename_or_copy(&tmp_new, &new_zip_path)
                 .map_err(|e| ManagerError::Io(format!("安装新版本失败：{}", e)))?;
 
-            self.ui
-                .message(&format!("安装成功：{}", new_zip_path.display()))?;
+            self.ui.upgrade_install_success(&new_zip_path)?;
         }
 
         // 7. 清理临时文件
-        self.ui.message("")?;
-        self.ui.message("正在清理临时文件...")?;
+        self.ui.upgrade_cleanup_start()?;
         self.cleanup_old_files()?;
 
-        self.ui.message("")?;
-        self.ui.message("✔  升级完成！")?;
+        self.ui.upgrade_done()?;
 
         Ok(())
     }
