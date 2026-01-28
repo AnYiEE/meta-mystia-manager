@@ -32,7 +32,7 @@ impl<'a> Installer<'a> {
             .game_root
             .join("BepInEx")
             .join("plugins")
-            .join("MetaMystia-v*.dll");
+            .join("MetaMystia-*.dll");
 
         let matches = glob_matches(&metamystia_pattern);
         !matches.is_empty()
@@ -42,7 +42,7 @@ impl<'a> Installer<'a> {
     pub fn check_resourceex_installed(&self) -> bool {
         let resourceex_dir = self.game_root.join("ResourceEx");
         resourceex_dir.exists() && resourceex_dir.is_dir() && {
-            let resourceex_pattern = resourceex_dir.join("ResourceExample-v*.zip");
+            let resourceex_pattern = resourceex_dir.join("ResourceExample-*.zip");
             let matches = glob_matches(&resourceex_pattern);
             !matches.is_empty()
         }
@@ -91,7 +91,7 @@ impl<'a> Installer<'a> {
         // 2. 删除 plugins 目录中的 MetaMystia DLL
         let plugins_dir = bepinex_dir.join("plugins");
         if plugins_dir.exists() {
-            let metamystia_pattern = plugins_dir.join("MetaMystia-v*.dll");
+            let metamystia_pattern = plugins_dir.join("MetaMystia-*.dll");
             for entry in glob_matches(&metamystia_pattern) {
                 push(entry);
             }
@@ -100,7 +100,7 @@ impl<'a> Installer<'a> {
         // 3. 删除 ResourceEx 目录中的 ResourceExample ZIP
         let resourceex_dir = game_root.join("ResourceEx");
         if resourceex_dir.exists() {
-            let resourceex_pattern = resourceex_dir.join("ResourceExample-v*.zip");
+            let resourceex_pattern = resourceex_dir.join("ResourceExample-*.zip");
             for entry in glob_matches(&resourceex_pattern) {
                 push(entry);
             }
@@ -150,7 +150,7 @@ impl<'a> Installer<'a> {
             let resourceex_pattern = self
                 .game_root
                 .join("ResourceEx")
-                .join("ResourceExample-v*.zip");
+                .join("ResourceExample-*.zip");
             let resourceex_exists = !glob_matches(&resourceex_pattern).is_empty();
             if resourceex_exists {
                 true

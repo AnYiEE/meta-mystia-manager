@@ -6,8 +6,8 @@ pub enum UninstallMode {
 
 impl UninstallMode {
     const LIGHT_TARGETS: &'static [(&'static str, bool)] = &[
-        ("BepInEx/plugins/MetaMystia-v*.dll", false),
-        ("ResourceEx/ResourceExample-v*.zip", false),
+        ("BepInEx/plugins/MetaMystia-*.dll", false),
+        ("ResourceEx/ResourceExample-*.zip", false),
     ];
 
     const FULL_TARGETS: &'static [(&'static str, bool)] = &[

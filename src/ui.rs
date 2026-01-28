@@ -44,33 +44,35 @@ pub trait Ui: Send + Sync {
     fn install_finished(&self) -> Result<()>;
 
     // 升级相关
+    fn upgrade_warn_unparse_version(&self, filename: &str) -> Result<()>;
+    fn upgrade_backup_failed(&self, err: &str) -> Result<()>;
+    fn upgrade_deleted(&self, path: &Path) -> Result<()>;
+    fn upgrade_delete_failed(&self, path: &Path, err: &str) -> Result<()>;
     fn upgrade_checking_installed_version(&self) -> Result<()>;
     fn upgrade_detected_resourceex(&self) -> Result<()>;
     fn upgrade_display_current_and_latest_dll(&self, current: &str, latest: &str) -> Result<()>;
+    fn upgrade_display_current_and_latest_resourceex(
+        &self,
+        current: &str,
+        latest: &str,
+    ) -> Result<()>;
     fn upgrade_no_update_needed(&self) -> Result<()>;
     fn upgrade_detected_new_dll(&self, current: &str, new: &str) -> Result<()>;
     fn upgrade_dll_already_latest(&self) -> Result<()>;
     fn upgrade_resourceex_needs_upgrade(&self) -> Result<()>;
     fn upgrade_downloading_dll(&self) -> Result<()>;
     fn upgrade_downloading_resourceex(&self) -> Result<()>;
+    fn upgrade_installing_dll(&self) -> Result<()>;
+    fn upgrade_installing_resourceex(&self) -> Result<()>;
     fn upgrade_install_success(&self, path: &Path) -> Result<()>;
     fn upgrade_cleanup_start(&self) -> Result<()>;
     fn upgrade_done(&self) -> Result<()>;
-    fn upgrade_warn_unparse_version(&self, filename: &str) -> Result<()>;
-    fn upgrade_backup_failed(&self, err: &str) -> Result<()>;
-    fn upgrade_deleted(&self, path: &Path) -> Result<()>;
-    fn upgrade_delete_failed(&self, path: &Path, err: &str) -> Result<()>;
-    fn upgrade_installing_dll(&self) -> Result<()>;
-    fn upgrade_installing_resourceex(&self) -> Result<()>;
-    fn upgrade_display_resourceex_versions(&self, current: &str, latest: &str) -> Result<()>;
 
     // 卸载相关
     fn uninstall_select_mode(&self) -> Result<UninstallMode>;
+    fn uninstall_no_files_found(&self) -> Result<()>;
     fn uninstall_display_target_files(&self, files: &[PathBuf]) -> Result<()>;
     fn uninstall_confirm_deletion(&self) -> Result<bool>;
-    fn uninstall_ask_retry_failures(&self) -> Result<bool>;
-    fn uninstall_ask_elevate_permission(&self) -> Result<bool>;
-    fn uninstall_no_files_found(&self) -> Result<()>;
     fn uninstall_files_in_use_warning(&self) -> Result<()>;
     fn uninstall_wait_before_retry(
         &self,
@@ -78,7 +80,9 @@ pub trait Ui: Send + Sync {
         attempt: usize,
         attempts: usize,
     ) -> Result<()>;
+    fn uninstall_ask_elevate_permission(&self) -> Result<bool>;
     fn uninstall_restarting_elevated(&self) -> Result<()>;
+    fn uninstall_ask_retry_failures(&self) -> Result<bool>;
     fn uninstall_retrying_failed_items(&self) -> Result<()>;
 
     // 删除相关
@@ -101,10 +105,11 @@ pub trait Ui: Send + Sync {
     /// 完成下载任务（并显示完成信息）
     fn download_finish(&self, id: usize, message: &str);
     fn download_version_info_start(&self) -> Result<()>;
-    fn download_version_info_success(&self) -> Result<()>;
     fn download_version_info_failed(&self, err: &str) -> Result<()>;
+    fn download_version_info_success(&self) -> Result<()>;
     fn download_version_info_parse_failed(&self, err: &str, snippet: &str) -> Result<()>;
     fn download_share_code_start(&self) -> Result<()>;
+    fn download_share_code_failed(&self, err: &str) -> Result<()>;
     fn download_share_code_success(&self) -> Result<()>;
     fn download_attempt_github_dll(&self) -> Result<()>;
     fn download_found_github_asset(&self, name: &str) -> Result<()>;
@@ -114,7 +119,6 @@ pub trait Ui: Send + Sync {
     fn download_resourceex_start(&self) -> Result<()>;
     fn download_bepinex_attempt_primary(&self) -> Result<()>;
     fn download_bepinex_primary_failed(&self, err: &str) -> Result<()>;
-    fn download_share_code_failed(&self, err: &str) -> Result<()>;
 
     // 网络相关
     fn network_retrying(
@@ -215,6 +219,22 @@ impl Ui for ConsoleUI {
         install_finished()
     }
 
+    fn upgrade_warn_unparse_version(&self, filename: &str) -> Result<()> {
+        upgrade_warn_unparse_version(filename)
+    }
+
+    fn upgrade_backup_failed(&self, err: &str) -> Result<()> {
+        upgrade_backup_failed(err)
+    }
+
+    fn upgrade_deleted(&self, path: &Path) -> Result<()> {
+        upgrade_deleted(path)
+    }
+
+    fn upgrade_delete_failed(&self, path: &Path, err: &str) -> Result<()> {
+        upgrade_delete_failed(path, err)
+    }
+
     fn upgrade_checking_installed_version(&self) -> Result<()> {
         upgrade_checking_installed_version()
     }
@@ -225,6 +245,14 @@ impl Ui for ConsoleUI {
 
     fn upgrade_display_current_and_latest_dll(&self, current: &str, latest: &str) -> Result<()> {
         upgrade_display_current_and_latest_dll(current, latest)
+    }
+
+    fn upgrade_display_current_and_latest_resourceex(
+        &self,
+        current: &str,
+        latest: &str,
+    ) -> Result<()> {
+        upgrade_display_current_and_latest_resourceex(current, latest)
     }
 
     fn upgrade_no_update_needed(&self) -> Result<()> {
@@ -251,6 +279,14 @@ impl Ui for ConsoleUI {
         upgrade_downloading_resourceex()
     }
 
+    fn upgrade_installing_dll(&self) -> Result<()> {
+        upgrade_installing_dll()
+    }
+
+    fn upgrade_installing_resourceex(&self) -> Result<()> {
+        upgrade_installing_resourceex()
+    }
+
     fn upgrade_install_success(&self, path: &Path) -> Result<()> {
         upgrade_install_success(path)
     }
@@ -263,36 +299,12 @@ impl Ui for ConsoleUI {
         upgrade_done()
     }
 
-    fn upgrade_warn_unparse_version(&self, filename: &str) -> Result<()> {
-        upgrade_warn_unparse_version(filename)
-    }
-
-    fn upgrade_backup_failed(&self, err: &str) -> Result<()> {
-        upgrade_backup_failed(err)
-    }
-
-    fn upgrade_deleted(&self, path: &Path) -> Result<()> {
-        upgrade_deleted(path)
-    }
-
-    fn upgrade_delete_failed(&self, path: &Path, err: &str) -> Result<()> {
-        upgrade_delete_failed(path, err)
-    }
-
-    fn upgrade_installing_dll(&self) -> Result<()> {
-        upgrade_installing_dll()
-    }
-
-    fn upgrade_installing_resourceex(&self) -> Result<()> {
-        upgrade_installing_resourceex()
-    }
-
-    fn upgrade_display_resourceex_versions(&self, current: &str, latest: &str) -> Result<()> {
-        upgrade_display_resourceex_versions(current, latest)
-    }
-
     fn uninstall_select_mode(&self) -> Result<UninstallMode> {
         uninstall_select_uninstall_mode()
+    }
+
+    fn uninstall_no_files_found(&self) -> Result<()> {
+        uninstall_no_files_found()
     }
 
     fn uninstall_display_target_files(&self, files: &[PathBuf]) -> Result<()> {
@@ -301,18 +313,6 @@ impl Ui for ConsoleUI {
 
     fn uninstall_confirm_deletion(&self) -> Result<bool> {
         uninstall_confirm_deletion()
-    }
-
-    fn uninstall_ask_retry_failures(&self) -> Result<bool> {
-        uninstall_ask_retry_failures()
-    }
-
-    fn uninstall_ask_elevate_permission(&self) -> Result<bool> {
-        uninstall_ask_elevate_permission()
-    }
-
-    fn uninstall_no_files_found(&self) -> Result<()> {
-        uninstall_no_files_found()
     }
 
     fn uninstall_files_in_use_warning(&self) -> Result<()> {
@@ -328,8 +328,16 @@ impl Ui for ConsoleUI {
         uninstall_wait_before_retry(delay_secs, attempt, attempts)
     }
 
+    fn uninstall_ask_elevate_permission(&self) -> Result<bool> {
+        uninstall_ask_elevate_permission()
+    }
+
     fn uninstall_restarting_elevated(&self) -> Result<()> {
         uninstall_restarting_elevated()
+    }
+
+    fn uninstall_ask_retry_failures(&self) -> Result<bool> {
+        uninstall_ask_retry_failures()
     }
 
     fn uninstall_retrying_failed_items(&self) -> Result<()> {
@@ -407,12 +415,24 @@ impl Ui for ConsoleUI {
         download_version_info_start()
     }
 
+    fn download_version_info_failed(&self, err: &str) -> Result<()> {
+        download_version_info_failed(err)
+    }
+
     fn download_version_info_success(&self) -> Result<()> {
         download_version_info_success()
     }
 
+    fn download_version_info_parse_failed(&self, err: &str, snippet: &str) -> Result<()> {
+        download_version_info_parse_failed(err, snippet)
+    }
+
     fn download_share_code_start(&self) -> Result<()> {
         download_share_code_start()
+    }
+
+    fn download_share_code_failed(&self, err: &str) -> Result<()> {
+        download_share_code_failed(err)
     }
 
     fn download_share_code_success(&self) -> Result<()> {
@@ -449,18 +469,6 @@ impl Ui for ConsoleUI {
 
     fn download_bepinex_primary_failed(&self, err: &str) -> Result<()> {
         download_bepinex_primary_failed(err)
-    }
-
-    fn download_version_info_failed(&self, err: &str) -> Result<()> {
-        download_version_info_failed(err)
-    }
-
-    fn download_version_info_parse_failed(&self, err: &str, snippet: &str) -> Result<()> {
-        download_version_info_parse_failed(err, snippet)
-    }
-
-    fn download_share_code_failed(&self, err: &str) -> Result<()> {
-        download_share_code_failed(err)
     }
 
     fn network_retrying(
@@ -656,6 +664,29 @@ fn install_finished() -> Result<()> {
 
 // ==================== 升级相关 UI ====================
 
+fn upgrade_warn_unparse_version(filename: &str) -> Result<()> {
+    println!("{}", style(format!("无法解析版本：{}", filename)).yellow());
+    Ok(())
+}
+
+fn upgrade_backup_failed(err: &str) -> Result<()> {
+    println!("{}", style(format!("备份失败：{}", err)).yellow());
+    Ok(())
+}
+
+fn upgrade_deleted(path: &Path) -> Result<()> {
+    println!("已删除：{}", path.display());
+    Ok(())
+}
+
+fn upgrade_delete_failed(path: &Path, err: &str) -> Result<()> {
+    println!(
+        "{}",
+        style(format!("删除失败：{}（{}）", path.display(), err)).yellow()
+    );
+    Ok(())
+}
+
 fn upgrade_checking_installed_version() -> Result<()> {
     println!();
     println!("正在检查当前安装的版本...");
@@ -710,6 +741,18 @@ fn upgrade_downloading_resourceex() -> Result<()> {
     Ok(())
 }
 
+fn upgrade_installing_dll() -> Result<()> {
+    println!();
+    println!();
+    println!("正在安装 MetaMystia DLL...");
+    Ok(())
+}
+
+fn upgrade_installing_resourceex() -> Result<()> {
+    println!("正在安装 ResourceExample ZIP...");
+    Ok(())
+}
+
 fn upgrade_install_success(path: &Path) -> Result<()> {
     println!("安装成功：{}", path.display());
     Ok(())
@@ -726,42 +769,8 @@ fn upgrade_done() -> Result<()> {
     println!("✔  升级完成！");
     Ok(())
 }
-fn upgrade_warn_unparse_version(filename: &str) -> Result<()> {
-    println!("{}", style(format!("无法解析版本：{}", filename)).yellow());
-    Ok(())
-}
 
-fn upgrade_backup_failed(err: &str) -> Result<()> {
-    println!("{}", style(format!("备份失败：{}", err)).yellow());
-    Ok(())
-}
-
-fn upgrade_deleted(path: &Path) -> Result<()> {
-    println!("已删除：{}", path.display());
-    Ok(())
-}
-
-fn upgrade_delete_failed(path: &Path, err: &str) -> Result<()> {
-    println!(
-        "{}",
-        style(format!("删除失败：{}（{}）", path.display(), err)).yellow()
-    );
-    Ok(())
-}
-
-fn upgrade_installing_dll() -> Result<()> {
-    println!();
-    println!();
-    println!("正在安装 MetaMystia DLL...");
-    Ok(())
-}
-
-fn upgrade_installing_resourceex() -> Result<()> {
-    println!("正在安装 ResourceExample ZIP...");
-    Ok(())
-}
-
-fn upgrade_display_resourceex_versions(current: &str, latest: &str) -> Result<()> {
+fn upgrade_display_current_and_latest_resourceex(current: &str, latest: &str) -> Result<()> {
     println!("当前 ResourceExample ZIP 版本：{}", style(current).green());
     println!("最新 ResourceExample ZIP 版本：{}", style(latest).green());
     Ok(())
@@ -806,6 +815,12 @@ fn uninstall_select_uninstall_mode() -> Result<UninstallMode> {
     }
 }
 
+fn uninstall_no_files_found() -> Result<()> {
+    println!();
+    println!("未找到需要删除的文件，可能已经卸载完成。");
+    Ok(())
+}
+
 fn uninstall_display_target_files(files: &[PathBuf]) -> Result<()> {
     println!();
     println!("{}", style("即将删除以下文件/文件夹：").yellow().bold());
@@ -833,38 +848,6 @@ fn uninstall_confirm_deletion() -> Result<bool> {
     }
 }
 
-fn uninstall_ask_retry_failures() -> Result<bool> {
-    println!();
-    let retry = Confirm::with_theme(&ColorfulTheme::default())
-        .with_prompt(" 是否重试失败的项目？")
-        .default(true)
-        .interact_on_opt(&Term::stdout())?;
-
-    Ok(retry.unwrap_or(false))
-}
-
-fn uninstall_ask_elevate_permission() -> Result<bool> {
-    println!();
-    println!(
-        "{}",
-        style("部分文件删除失败，可能需要管理员权限。").yellow()
-    );
-    println!();
-
-    let elevate = Confirm::with_theme(&ColorfulTheme::default())
-        .with_prompt(" 是否以管理员权限重新运行？")
-        .default(true)
-        .interact_on_opt(&Term::stdout())?;
-
-    Ok(elevate.unwrap_or(false))
-}
-
-fn uninstall_no_files_found() -> Result<()> {
-    println!();
-    println!("未找到需要删除的文件，可能已经卸载完成。");
-    Ok(())
-}
-
 fn uninstall_files_in_use_warning() -> Result<()> {
     println!();
     println!(
@@ -883,10 +866,36 @@ fn uninstall_wait_before_retry(delay_secs: u64, attempt: usize, attempts: usize)
     Ok(())
 }
 
+fn uninstall_ask_elevate_permission() -> Result<bool> {
+    println!();
+    println!(
+        "{}",
+        style("部分文件删除失败，可能需要管理员权限。").yellow()
+    );
+    println!();
+
+    let elevate = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(" 是否以管理员权限重新运行？")
+        .default(true)
+        .interact_on_opt(&Term::stdout())?;
+
+    Ok(elevate.unwrap_or(false))
+}
+
 fn uninstall_restarting_elevated() -> Result<()> {
     println!();
     println!("正在以管理员权限重新启动...");
     Ok(())
+}
+
+fn uninstall_ask_retry_failures() -> Result<bool> {
+    println!();
+    let retry = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(" 是否重试失败的项目？")
+        .default(true)
+        .interact_on_opt(&Term::stdout())?;
+
+    Ok(retry.unwrap_or(false))
 }
 
 fn uninstall_retrying_failed_items() -> Result<()> {
@@ -902,13 +911,35 @@ fn download_version_info_start() -> Result<()> {
     Ok(())
 }
 
+fn download_version_info_failed(err: &str) -> Result<()> {
+    println!("{}", style(format!("获取版本信息失败：{}", err)).yellow());
+    Ok(())
+}
+
 fn download_version_info_success() -> Result<()> {
     println!("获取版本信息成功");
     Ok(())
 }
 
+fn download_version_info_parse_failed(err: &str, snippet: &str) -> Result<()> {
+    println!(
+        "{}",
+        style(format!(
+            "版本信息 JSON 解析失败：{}，response snippet：{}",
+            err, snippet
+        ))
+        .yellow()
+    );
+    Ok(())
+}
+
 fn download_share_code_start() -> Result<()> {
     println!("正在获取下载链接...");
+    Ok(())
+}
+
+fn download_share_code_failed(err: &str) -> Result<()> {
+    println!("{}", style(format!("获取下载链接失败：{}", err)).yellow());
     Ok(())
 }
 
@@ -955,28 +986,6 @@ fn download_bepinex_attempt_primary() -> Result<()> {
 
 fn download_bepinex_primary_failed(err: &str) -> Result<()> {
     println!("{}", style(err).yellow());
-    Ok(())
-}
-
-fn download_version_info_failed(err: &str) -> Result<()> {
-    println!("{}", style(format!("获取版本信息失败：{}", err)).yellow());
-    Ok(())
-}
-
-fn download_version_info_parse_failed(err: &str, snippet: &str) -> Result<()> {
-    println!(
-        "{}",
-        style(format!(
-            "版本信息 JSON 解析失败：{}，response snippet：{}",
-            err, snippet
-        ))
-        .yellow()
-    );
-    Ok(())
-}
-
-fn download_share_code_failed(err: &str) -> Result<()> {
-    println!("{}", style(format!("获取下载链接失败：{}", err)).yellow());
     Ok(())
 }
 

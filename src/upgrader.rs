@@ -38,17 +38,44 @@ impl<'a> Upgrader<'a> {
 
     fn consolidate_installed_dlls(&self) -> Result<Option<(String, PathBuf)>> {
         let plugins_dir = self.game_root.join("BepInEx").join("plugins");
+        self.consolidate_installed_by_pattern(
+            &plugins_dir,
+            "MetaMystia-*.dll",
+            "MetaMystia-v",
+            ".dll",
+            "dll.old",
+        )
+    }
 
-        if !plugins_dir.exists() {
+    fn consolidate_installed_resourceex(&self) -> Result<Option<(String, PathBuf)>> {
+        let resourceex_dir = self.game_root.join("ResourceEx");
+        self.consolidate_installed_by_pattern(
+            &resourceex_dir,
+            "ResourceExample-*.zip",
+            "ResourceExample-v",
+            ".zip",
+            "zip.old",
+        )
+    }
+
+    fn consolidate_installed_by_pattern(
+        &self,
+        dir: &PathBuf,
+        pattern: &str,
+        prefix: &str,
+        suffix: &str,
+        backup_suffix: &str,
+    ) -> Result<Option<(String, PathBuf)>> {
+        if !dir.exists() {
             return Ok(None);
         }
 
         let mut parsed: Vec<(Version, PathBuf)> = Vec::new();
         let mut unparsed: Vec<PathBuf> = Vec::new();
 
-        for path in glob_matches(&plugins_dir.join("MetaMystia-*.dll")).into_iter() {
+        for path in glob_matches(&dir.join(pattern)).into_iter() {
             if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                if let Some(v) = Self::parse_version(filename, "MetaMystia-v", ".dll") {
+                if let Some(v) = Self::parse_version(filename, prefix, suffix) {
                     parsed.push((v, path.clone()));
                 } else {
                     self.ui.upgrade_warn_unparse_version(filename)?;
@@ -74,7 +101,7 @@ impl<'a> Upgrader<'a> {
             let to_backup: Vec<PathBuf> =
                 parsed.into_iter().rev().skip(1).map(|(_, p)| p).collect();
 
-            let results = backup_paths_with_index(&to_backup, "dll.old");
+            let results = backup_paths_with_index(&to_backup, backup_suffix);
             for res in results {
                 match res {
                     Ok(_backup) => (),
@@ -97,7 +124,7 @@ impl<'a> Upgrader<'a> {
 
             let to_backup: Vec<PathBuf> = unparsed.into_iter().rev().skip(1).collect();
 
-            let results = backup_paths_with_index(&to_backup, "dll.old");
+            let results = backup_paths_with_index(&to_backup, backup_suffix);
             for res in results {
                 match res {
                     Ok(_backup) => (),
@@ -112,7 +139,7 @@ impl<'a> Upgrader<'a> {
     fn cleanup_old_files(&self) -> Result<()> {
         let plugins_dir = self.game_root.join("BepInEx").join("plugins");
         if plugins_dir.exists() {
-            let pattern = plugins_dir.join("MetaMystia-v*.dll.old*");
+            let pattern = plugins_dir.join("MetaMystia-*.dll.old*");
             let result = remove_glob_files(&pattern);
             for removed in result.removed.iter() {
                 self.ui.upgrade_deleted(removed)?;
@@ -124,7 +151,7 @@ impl<'a> Upgrader<'a> {
 
         let resourceex_dir = self.game_root.join("ResourceEx");
         if resourceex_dir.exists() {
-            let pattern = resourceex_dir.join("ResourceExample-v*.zip.old*");
+            let pattern = resourceex_dir.join("ResourceExample-*.zip.old*");
             let result = remove_glob_files(&pattern);
             for removed in result.removed.iter() {
                 self.ui.upgrade_deleted(removed)?;
@@ -142,7 +169,7 @@ impl<'a> Upgrader<'a> {
         // 1. 查找当前安装的版本
         self.ui.upgrade_checking_installed_version()?;
 
-        let (current_version, _current_dll_path) = match self.consolidate_installed_dlls()? {
+        let (current_dll_version, _current_dll_path) = match self.consolidate_installed_dlls()? {
             Some((version, path)) => (version, path),
             None => {
                 return Err(ManagerError::Other(
@@ -151,12 +178,14 @@ impl<'a> Upgrader<'a> {
             }
         };
 
-        // 检查是否已安装 ResourceExample ZIP
-        let resourceex_dir = self.game_root.join("ResourceEx");
-        let has_resourceex = resourceex_dir.exists()
-            && resourceex_dir.is_dir()
-            && !glob_matches(&resourceex_dir.join("ResourceExample-v*.zip")).is_empty();
+        let (current_resourceex_version, _current_resourceex_path) =
+            match self.consolidate_installed_resourceex()? {
+                Some((version, path)) => (version, path),
+                None => ("".to_string(), PathBuf::new()),
+            };
 
+        // 检查是否已安装 ResourceExample ZIP
+        let has_resourceex = !current_resourceex_version.is_empty();
         if has_resourceex {
             self.ui.upgrade_detected_resourceex()?;
         }
@@ -164,40 +193,22 @@ impl<'a> Upgrader<'a> {
         // 2. 获取最新版本信息
         self.ui.blank_line()?;
         let version_info = self.downloader.get_version_info()?;
-        let new_version = &version_info.dll;
-
-        self.ui
-            .upgrade_display_current_and_latest_dll(&current_version, new_version)?;
 
         // 检查 MetaMystia DLL 是否需要升级
-        let dll_needs_upgrade = current_version != *new_version;
+        let new_dll_version = &version_info.dll;
+        let dll_needs_upgrade = current_dll_version != *new_dll_version;
+        self.ui
+            .upgrade_display_current_and_latest_dll(&current_dll_version, new_dll_version)?;
 
         // 检查 ResourceExample ZIP 是否需要升级
-        let mut resourceex_needs_upgrade = false;
+        let new_resourceex_version = &version_info.zip;
+        let resourceex_needs_upgrade =
+            (current_resourceex_version != *new_resourceex_version) && has_resourceex;
         if has_resourceex {
-            // 查找当前安装的 ResourceExample ZIP 版本
-            let current_resourceex_pattern = resourceex_dir.join("ResourceExample-v*.zip");
-            let mut current_resourceex_version = None;
-
-            for entry in glob_matches(&current_resourceex_pattern) {
-                if let Some(filename) = entry.file_name().and_then(|n| n.to_str()) {
-                    if filename.ends_with(".old") {
-                        continue;
-                    }
-                    if let Some(version_part) =
-                        Self::parse_version(filename, "ResourceExample-v", ".zip")
-                    {
-                        current_resourceex_version = Some(version_part.to_string());
-                        break;
-                    }
-                }
-            }
-
-            if let Some(current_ver) = current_resourceex_version {
-                self.ui
-                    .upgrade_display_resourceex_versions(&current_ver, &version_info.zip)?;
-                resourceex_needs_upgrade = current_ver != version_info.zip;
-            }
+            self.ui.upgrade_display_current_and_latest_resourceex(
+                &current_resourceex_version,
+                new_resourceex_version,
+            )?;
         }
 
         if !dll_needs_upgrade && !resourceex_needs_upgrade {
@@ -208,7 +219,7 @@ impl<'a> Upgrader<'a> {
         // 显示升级信息
         if dll_needs_upgrade {
             self.ui
-                .upgrade_detected_new_dll(&current_version, new_version)?;
+                .upgrade_detected_new_dll(&current_dll_version, new_dll_version)?;
         } else {
             self.ui.upgrade_dll_already_latest()?;
         }
@@ -233,7 +244,7 @@ impl<'a> Upgrader<'a> {
 
         // 下载 DLL（仅当需要升级时）
         let temp_dll_path = if dll_needs_upgrade {
-            let new_dll_filename = format!("MetaMystia-v{}.dll", new_version);
+            let new_dll_filename = version_info.metamystia_filename();
             let path = temp_dir.join(&new_dll_filename);
 
             self.downloader
@@ -264,7 +275,7 @@ impl<'a> Upgrader<'a> {
             let plugins_dir = self.game_root.join("BepInEx").join("plugins");
             let mut backup_paths: Vec<PathBuf> = Vec::new();
 
-            let old_dll_pattern = plugins_dir.join("MetaMystia-v*.dll");
+            let old_dll_pattern = plugins_dir.join("MetaMystia-*.dll");
             let mut to_backup: Vec<PathBuf> = Vec::new();
             for old_entry in glob_matches(&old_dll_pattern) {
                 if let Some(old_filename) = old_entry.file_name().and_then(|n| n.to_str())
@@ -310,7 +321,8 @@ impl<'a> Upgrader<'a> {
 
         // 6. 安装 ResourceExample ZIP（仅当需要升级时）
         if let Some((temp_path, filename)) = temp_resourceex_path {
-            let old_resourceex_pattern = resourceex_dir.join("ResourceExample-v*.zip");
+            let resourceex_dir = self.game_root.join("ResourceEx");
+            let old_resourceex_pattern = resourceex_dir.join("ResourceExample-*.zip");
             let mut to_backup: Vec<PathBuf> = Vec::new();
             for old_entry in glob_matches(&old_resourceex_pattern) {
                 if let Some(old_filename) = old_entry.file_name().and_then(|n| n.to_str())
