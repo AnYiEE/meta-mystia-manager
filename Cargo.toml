@@ -7,8 +7,11 @@ description = "A manager for MetaMystia Mod (https://github.com/MetaMikuAI/MetaM
 license = "AGPL-3.0-only"
 
 [profile.release]
+codegen-units = 1
 lto = true
 opt-level = "z"
+panic = "abort"
+strip = true
 
 [dependencies]
 # Windows API
