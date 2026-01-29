@@ -7,7 +7,7 @@ use crate::temp_dir::create_temp_dir_with_guard;
 use crate::ui::Ui;
 
 use semver::Version;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// 升级管理器
 pub struct Upgrader<'a> {
@@ -60,7 +60,7 @@ impl<'a> Upgrader<'a> {
 
     fn consolidate_installed_by_pattern(
         &self,
-        dir: &PathBuf,
+        dir: &Path,
         pattern: &str,
         prefix: &str,
         suffix: &str,

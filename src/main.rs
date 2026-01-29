@@ -72,14 +72,14 @@ fn run(ui: &dyn Ui) -> Result<()> {
     // 自升级提示
     if let (Some(downloader), Some(vi)) = (downloader.as_ref(), version_info.as_ref()) {
         let current_version = env!("CARGO_PKG_VERSION");
-        if current_version != vi.manager {
-            if ui.manager_ask_self_update(current_version, &vi.manager)? {
-                match perform_self_update(&std::env::current_dir()?, ui, downloader, vi) {
-                    Ok(()) => {
-                        std::process::exit(0);
-                    }
-                    Err(e) => ui.manager_update_failed(&format!("{}", e))?,
+        if current_version != vi.manager
+            && ui.manager_ask_self_update(current_version, &vi.manager)?
+        {
+            match perform_self_update(&std::env::current_dir()?, ui, downloader, vi) {
+                Ok(()) => {
+                    std::process::exit(0);
                 }
+                Err(e) => ui.manager_update_failed(&format!("{}", e))?,
             }
         }
     }

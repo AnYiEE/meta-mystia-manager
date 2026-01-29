@@ -31,28 +31,24 @@ impl Drop for SnapshotHandle {
 
 /// 检查游戏根目录
 pub fn check_game_directory(ui: &dyn Ui) -> Result<PathBuf> {
-    match SteamDir::locate() {
-        Ok(steam_dir) => match steam_dir.find_app(GAME_STEAM_APP_ID) {
-            Ok(Some((app, library))) => {
-                let install_dir = app.install_dir;
-                let candidate = library
-                    .path()
-                    .join("steamapps")
-                    .join("common")
-                    .join(&install_dir);
-                if candidate.join(GAME_EXECUTABLE).is_file() {
-                    ui.path_display_steam_found(app.app_id, app.name.as_deref(), &candidate)?;
-                    if ui.path_confirm_use_steam_found()? {
-                        ui.blank_line()?;
-                        return Ok(candidate);
-                    } else {
-                        ui.blank_line()?;
-                    }
-                }
+    if let Ok(steam_dir) = SteamDir::locate()
+        && let Ok(Some((app, library))) = steam_dir.find_app(GAME_STEAM_APP_ID)
+    {
+        let install_dir = app.install_dir;
+        let candidate = library
+            .path()
+            .join("steamapps")
+            .join("common")
+            .join(&install_dir);
+        if candidate.join(GAME_EXECUTABLE).is_file() {
+            ui.path_display_steam_found(app.app_id, app.name.as_deref(), &candidate)?;
+            if ui.path_confirm_use_steam_found()? {
+                ui.blank_line()?;
+                return Ok(candidate);
+            } else {
+                ui.blank_line()?;
             }
-            _ => {}
-        },
-        _ => {}
+        }
     }
 
     let current_dir = std::env::current_dir()?;
