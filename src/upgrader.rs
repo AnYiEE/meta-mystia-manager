@@ -239,8 +239,12 @@ impl<'a> Upgrader<'a> {
             self.ui.upgrade_downloading_dll()?;
         }
 
-        let (temp_dir, _temp_guard) = create_temp_dir_with_guard(&self.game_root)
-            .map_err(|e| ManagerError::Io(format!("创建临时目录失败：{}", e)))?;
+        let (temp_dir, _temp_guard) = create_temp_dir_with_guard(&self.game_root).map_err(|e| {
+            ManagerError::from(std::io::Error::new(
+                e.kind(),
+                format!("创建临时目录失败：{}", e),
+            ))
+        })?;
 
         // 下载 DLL（仅当需要升级时）
         let temp_dll_path = if dll_needs_upgrade {
@@ -298,15 +302,24 @@ impl<'a> Upgrader<'a> {
             let new_dll_path = plugins_dir.join(&filename);
 
             if !plugins_dir.exists() {
-                std::fs::create_dir_all(&plugins_dir)
-                    .map_err(|e| ManagerError::Io(format!("创建 plugins 目录失败：{}", e)))?;
+                std::fs::create_dir_all(&plugins_dir).map_err(|e| {
+                    ManagerError::from(std::io::Error::new(
+                        e.kind(),
+                        format!("创建 plugins 目录失败：{}", e),
+                    ))
+                })?;
             }
 
             let tmp_new = new_dll_path.with_extension("dll.tmp");
-            std::fs::copy(&temp_path, &tmp_new)
-                .map_err(|e| ManagerError::Io(format!("复制临时文件失败：{}", e)))?;
-            atomic_rename_or_copy(&tmp_new, &new_dll_path)
-                .map_err(|e| ManagerError::Io(format!("安装新版本失败：{}", e)))?;
+            std::fs::copy(&temp_path, &tmp_new).map_err(|e| {
+                ManagerError::from(std::io::Error::new(
+                    e.kind(),
+                    format!("复制临时文件失败：{}", e),
+                ))
+            })?;
+            atomic_rename_or_copy(&tmp_new, &new_dll_path).map_err(|e| {
+                ManagerError::from(std::io::Error::other(format!("安装新版本失败：{}", e)))
+            })?;
 
             self.ui.upgrade_install_success(&new_dll_path)?;
 
@@ -348,10 +361,15 @@ impl<'a> Upgrader<'a> {
 
             let new_zip_path = resourceex_dir.join(&filename);
             let tmp_new = new_zip_path.with_extension("zip.tmp");
-            std::fs::copy(&temp_path, &tmp_new)
-                .map_err(|e| ManagerError::Io(format!("复制临时文件失败：{}", e)))?;
-            atomic_rename_or_copy(&tmp_new, &new_zip_path)
-                .map_err(|e| ManagerError::Io(format!("安装新版本失败：{}", e)))?;
+            std::fs::copy(&temp_path, &tmp_new).map_err(|e| {
+                ManagerError::from(std::io::Error::new(
+                    e.kind(),
+                    format!("复制临时文件失败：{}", e),
+                ))
+            })?;
+            atomic_rename_or_copy(&tmp_new, &new_zip_path).map_err(|e| {
+                ManagerError::from(std::io::Error::other(format!("安装新版本失败：{}", e)))
+            })?;
 
             self.ui.upgrade_install_success(&new_zip_path)?;
         }

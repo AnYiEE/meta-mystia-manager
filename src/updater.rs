@@ -37,7 +37,10 @@ pub fn perform_self_update(
         Ok(_) => {}
         Err(e) => {
             ui.manager_prompt_manual_update()?;
-            return Err(ManagerError::Io(format!("复制到运行目录失败：{}", e)));
+            return Err(ManagerError::from(std::io::Error::new(
+                e.kind(),
+                format!("复制到运行目录失败：{}", e),
+            )));
         }
     }
 
@@ -51,12 +54,19 @@ pub fn perform_self_update(
         std::process::id(),
     );
 
-    std::fs::write(&script_path, script.as_bytes())
-        .map_err(|e| ManagerError::Io(format!("写入升级脚本失败：{}", e)))?;
+    std::fs::write(&script_path, script.as_bytes()).map_err(|e| {
+        ManagerError::from(std::io::Error::new(
+            e.kind(),
+            format!("写入升级脚本失败：{}", e),
+        ))
+    })?;
 
     if !script_path.exists() {
         ui.manager_update_failed("升级脚本不存在")?;
-        return Err(ManagerError::Io("升级脚本不存在".to_string()));
+        return Err(ManagerError::from(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "升级脚本不存在",
+        )));
     }
 
     // 4. 启动脚本

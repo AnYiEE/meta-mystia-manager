@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Clone, Debug, Error)]
+#[derive(Debug, Error)]
 pub enum ManagerError {
     #[error("未在游戏根目录下运行")]
     GameNotFound,
@@ -33,7 +33,7 @@ pub enum ManagerError {
     InvalidVersionInfo,
 
     #[error("IO 错误：{0}")]
-    Io(String),
+    Io(#[source] std::io::Error),
 
     #[error("对话框错误：{0}")]
     Dialog(String),
@@ -59,7 +59,7 @@ impl From<dialoguer::Error> for ManagerError {
 
 impl From<std::io::Error> for ManagerError {
     fn from(err: std::io::Error) -> Self {
-        ManagerError::Io(err.to_string())
+        ManagerError::Io(err)
     }
 }
 

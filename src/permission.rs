@@ -76,8 +76,12 @@ pub fn elevate_and_restart() -> Result<()> {
     let mut script_path = std::env::temp_dir();
     script_path.push(format!("meta_mystia_elevate_{}.ps1", std::process::id()));
 
-    std::fs::write(&script_path, script.as_bytes())
-        .map_err(|e| ManagerError::Io(format!("写入提升脚本失败：{}", e)))?;
+    std::fs::write(&script_path, script.as_bytes()).map_err(|e| {
+        ManagerError::from(std::io::Error::new(
+            e.kind(),
+            format!("写入提升脚本失败：{}", e),
+        ))
+    })?;
 
     // 尝试优先使用 pwsh（PowerShell Core），若不可用再回退到 powershell.exe
     let shells = ["pwsh.exe", "powershell.exe"];

@@ -63,12 +63,11 @@ impl<'a> Uninstaller<'a> {
             for p in &failed_files {
                 if let Some(r) = all_results.iter().find(|r| &r.path == p) {
                     match &r.status {
-                        DeletionStatus::Failed(ManagerError::FileInUse(_)) => {
-                            in_use_failures.push(p.clone())
-                        }
-                        DeletionStatus::Failed(ManagerError::PermissionDenied(_)) => {
-                            perm_failures.push(p.clone())
-                        }
+                        DeletionStatus::Failed(err) => match &**err {
+                            ManagerError::FileInUse(_) => in_use_failures.push(p.clone()),
+                            ManagerError::PermissionDenied(_) => perm_failures.push(p.clone()),
+                            _ => other_failures.push(p.clone()),
+                        },
                         _ => other_failures.push(p.clone()),
                     }
                 } else {
@@ -104,10 +103,12 @@ impl<'a> Uninstaller<'a> {
                         .into_iter()
                         .filter(|p| {
                             if let Some(r) = all_results.iter().find(|r| &r.path == p) {
-                                matches!(
-                                    r.status,
-                                    DeletionStatus::Failed(ManagerError::FileInUse(_))
-                                )
+                                match &r.status {
+                                    DeletionStatus::Failed(err) => {
+                                        matches!(&**err, ManagerError::FileInUse(_))
+                                    }
+                                    _ => false,
+                                }
                             } else {
                                 false
                             }
@@ -121,11 +122,9 @@ impl<'a> Uninstaller<'a> {
                 }
             }
 
-            let has_permission_issue = all_results.iter().any(|r| {
-                matches!(
-                    &r.status,
-                    DeletionStatus::Failed(ManagerError::PermissionDenied(_))
-                )
+            let has_permission_issue = all_results.iter().any(|r| match &r.status {
+                DeletionStatus::Failed(err) => matches!(&**err, ManagerError::PermissionDenied(_)),
+                _ => false,
             });
 
             if has_permission_issue && !is_elevated && self.ui.uninstall_ask_elevate_permission()? {

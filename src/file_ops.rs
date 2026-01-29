@@ -3,8 +3,8 @@ use crate::error::ManagerError;
 use crate::ui::Ui;
 
 use glob::glob;
-use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[allow(clippy::permissions_set_readonly_false)]
 fn ensure_owner_writable(metadata: &std::fs::Metadata) -> std::fs::Permissions {
@@ -28,43 +28,67 @@ fn ensure_owner_writable(metadata: &std::fs::Metadata) -> std::fs::Permissions {
 const ERROR_SHARING_VIOLATION: i32 = 32;
 
 /// 将 io::Error 映射为更具体的 UninstallError
-pub fn map_io_error_to_uninstall_error(err: &io::Error, path: &Path) -> ManagerError {
+pub fn map_io_error_to_uninstall_error(err: &std::io::Error, path: &Path) -> ManagerError {
     if let Some(code) = err.raw_os_error()
         && cfg!(target_os = "windows")
         && code == ERROR_SHARING_VIOLATION
     {
-        return ManagerError::FileInUse(path.display().to_string());
+        ManagerError::FileInUse(path.display().to_string())
+    } else {
+        ManagerError::from(std::io::Error::new(err.kind(), err.to_string()))
     }
-    ManagerError::Io(format!("{}", err))
 }
 
 /// 原子重命名或回退到 copy + remove
-pub fn atomic_rename_or_copy(src: &Path, dst: &Path) -> io::Result<()> {
+pub fn atomic_rename_or_copy(src: &Path, dst: &Path) -> Result<(), ManagerError> {
     if let Some(parent) = dst.parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent).map_err(ManagerError::from)?;
     }
 
     match std::fs::rename(src, dst) {
         Ok(_) => Ok(()),
-        Err(rename_err) => match std::fs::copy(src, dst) {
-            Ok(_) => {
-                std::fs::remove_file(src)?;
-                Ok(())
+        Err(rename_err) => {
+            let mut tmp_path = dst.with_extension("tmp");
+            let mut tmp_idx = 0;
+            while tmp_path.exists() {
+                tmp_idx += 1;
+                tmp_path = dst.with_extension(format!("tmp{}", tmp_idx));
             }
-            Err(copy_err) => Err(io::Error::other(format!(
-                "重命名失败：{}；复制失败：{}",
-                rename_err, copy_err
-            ))),
-        },
+
+            std::fs::copy(src, &tmp_path).map_err(|e| {
+                ManagerError::from(std::io::Error::other(format!(
+                    "重命名失败：{}；复制到临时文件失败：{}",
+                    rename_err, e
+                )))
+            })?;
+
+            if let Ok(f) = std::fs::OpenOptions::new().read(true).open(&tmp_path) {
+                let _ = f.sync_all();
+            }
+
+            match std::fs::rename(&tmp_path, dst) {
+                Ok(_) => {
+                    std::fs::remove_file(src).map_err(ManagerError::from)?;
+                    Ok(())
+                }
+                Err(e) => {
+                    let _ = std::fs::remove_file(&tmp_path);
+                    Err(ManagerError::from(std::io::Error::other(format!(
+                        "重命名或替换目标失败：{}",
+                        e
+                    ))))
+                }
+            }
+        }
     }
 }
 
-fn backup_with_index(path: &Path, ext_suffix: &str) -> io::Result<PathBuf> {
+fn backup_with_index(path: &Path, ext_suffix: &str) -> Result<PathBuf, ManagerError> {
     if !path.exists() {
-        return Err(std::io::Error::new(
-            ErrorKind::NotFound,
+        return Err(ManagerError::from(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
             format!("源路径不存在：{}", path.display()),
-        ));
+        )));
     }
 
     let mut idx = 0;
@@ -100,7 +124,7 @@ fn normalize_path_for_glob(path: &Path) -> String {
 
 pub struct RemoveGlobResult {
     pub removed: Vec<PathBuf>,
-    pub failed: Vec<(PathBuf, io::Error)>,
+    pub failed: Vec<(PathBuf, ManagerError)>,
 }
 
 /// 删除匹配 glob 模式的文件/目录
@@ -120,7 +144,7 @@ pub fn remove_glob_files(pattern: &Path) -> RemoveGlobResult {
 
                 match res {
                     Ok(_) => removed.push(entry),
-                    Err(e) => failed.push((entry, e)),
+                    Err(e) => failed.push((entry, ManagerError::from(e))),
                 }
             }
         }
@@ -133,13 +157,10 @@ pub fn remove_glob_files(pattern: &Path) -> RemoveGlobResult {
 pub fn backup_paths_with_index(
     paths: &[PathBuf],
     ext_suffix: &str,
-) -> Vec<Result<PathBuf, io::Error>> {
+) -> Vec<Result<PathBuf, ManagerError>> {
     paths
         .iter()
-        .map(|p| match backup_with_index(p, ext_suffix) {
-            Ok(b) => Ok(b),
-            Err(e) => Err(e),
-        })
+        .map(|p| backup_with_index(p, ext_suffix))
         .collect()
 }
 
@@ -162,7 +183,7 @@ pub fn glob_matches(pattern: &Path) -> Vec<PathBuf> {
 #[derive(Clone)]
 pub enum DeletionStatus {
     Success,
-    Failed(ManagerError),
+    Failed(Arc<ManagerError>),
     Skipped,
 }
 
@@ -251,9 +272,9 @@ fn delete_file(path: &Path) -> DeletionResult {
             if path.exists() {
                 DeletionResult {
                     path: path.to_path_buf(),
-                    status: DeletionStatus::Failed(ManagerError::Other(
+                    status: DeletionStatus::Failed(Arc::new(ManagerError::Other(
                         "执行删除后文件仍存在".to_string(),
-                    )),
+                    ))),
                 }
             } else {
                 DeletionResult {
@@ -267,14 +288,14 @@ fn delete_file(path: &Path) -> DeletionResult {
             if let ManagerError::FileInUse(_) = map_io_error_to_uninstall_error(&e, path) {
                 return DeletionResult {
                     path: path.to_path_buf(),
-                    status: DeletionStatus::Failed(ManagerError::FileInUse(
+                    status: DeletionStatus::Failed(Arc::new(ManagerError::FileInUse(
                         path.display().to_string(),
-                    )),
+                    ))),
                 };
             }
 
             // 若为权限错误，尝试清除只读属性并重试一次
-            if e.kind() == ErrorKind::PermissionDenied
+            if e.kind() == std::io::ErrorKind::PermissionDenied
                 && let Ok(metadata) = std::fs::metadata(path)
             {
                 let perms = ensure_owner_writable(&metadata);
@@ -288,10 +309,10 @@ fn delete_file(path: &Path) -> DeletionResult {
             }
 
             let error = match e.kind() {
-                ErrorKind::PermissionDenied => {
+                std::io::ErrorKind::PermissionDenied => {
                     ManagerError::PermissionDenied(path.display().to_string())
                 }
-                ErrorKind::NotFound => {
+                std::io::ErrorKind::NotFound => {
                     return DeletionResult {
                         path: path.to_path_buf(),
                         status: DeletionStatus::Skipped,
@@ -302,7 +323,7 @@ fn delete_file(path: &Path) -> DeletionResult {
 
             DeletionResult {
                 path: path.to_path_buf(),
-                status: DeletionStatus::Failed(error),
+                status: DeletionStatus::Failed(Arc::new(error)),
             }
         }
     }
@@ -322,9 +343,9 @@ fn delete_directory(path: &Path) -> DeletionResult {
             if path.exists() {
                 DeletionResult {
                     path: path.to_path_buf(),
-                    status: DeletionStatus::Failed(ManagerError::Other(
+                    status: DeletionStatus::Failed(Arc::new(ManagerError::Other(
                         "执行删除后文件夹仍存在".to_string(),
-                    )),
+                    ))),
                 }
             } else {
                 DeletionResult {
@@ -338,14 +359,14 @@ fn delete_directory(path: &Path) -> DeletionResult {
             if let ManagerError::FileInUse(_) = map_io_error_to_uninstall_error(&e, path) {
                 return DeletionResult {
                     path: path.to_path_buf(),
-                    status: DeletionStatus::Failed(ManagerError::FileInUse(
+                    status: DeletionStatus::Failed(Arc::new(ManagerError::FileInUse(
                         path.display().to_string(),
-                    )),
+                    ))),
                 };
             }
 
             // 权限错误时尝试清除只读并重试一次
-            if e.kind() == ErrorKind::PermissionDenied
+            if e.kind() == std::io::ErrorKind::PermissionDenied
                 && let Ok(metadata) = std::fs::metadata(path)
             {
                 let perms = ensure_owner_writable(&metadata);
@@ -359,10 +380,10 @@ fn delete_directory(path: &Path) -> DeletionResult {
             }
 
             let error = match e.kind() {
-                ErrorKind::PermissionDenied => {
+                std::io::ErrorKind::PermissionDenied => {
                     ManagerError::PermissionDenied(path.display().to_string())
                 }
-                ErrorKind::NotFound => {
+                std::io::ErrorKind::NotFound => {
                     return DeletionResult {
                         path: path.to_path_buf(),
                         status: DeletionStatus::Skipped,
@@ -373,7 +394,7 @@ fn delete_directory(path: &Path) -> DeletionResult {
 
             DeletionResult {
                 path: path.to_path_buf(),
-                status: DeletionStatus::Failed(error),
+                status: DeletionStatus::Failed(Arc::new(error)),
             }
         }
     }
@@ -383,7 +404,7 @@ fn delete_directory(path: &Path) -> DeletionResult {
 pub fn extract_failed_files(results: &[DeletionResult]) -> Vec<PathBuf> {
     results
         .iter()
-        .filter_map(|r| match r.status {
+        .filter_map(|r| match &r.status {
             DeletionStatus::Failed(_) => Some(r.path.clone()),
             _ => None,
         })
@@ -397,7 +418,7 @@ pub fn count_results(results: &[DeletionResult]) -> (usize, usize, usize) {
     let mut skipped = 0;
 
     for result in results {
-        match result.status {
+        match &result.status {
             DeletionStatus::Success => success += 1,
             DeletionStatus::Failed(_) => failed += 1,
             DeletionStatus::Skipped => skipped += 1,

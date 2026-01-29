@@ -32,8 +32,12 @@ impl Extractor {
         dest_dir: &Path,
         exclude_patterns: &[&str],
     ) -> Result<Vec<PathBuf>> {
-        let file = std::fs::File::open(zip_path)
-            .map_err(|e| ManagerError::Io(format!("打开 ZIP 失败：{}", e)))?;
+        let file = std::fs::File::open(zip_path).map_err(|e| {
+            ManagerError::from(std::io::Error::new(
+                e.kind(),
+                format!("打开 ZIP 失败：{}", e),
+            ))
+        })?;
 
         let mut archive = ZipArchive::new(file)
             .map_err(|e| ManagerError::ExtractFailed(format!("读取 ZIP 失败：{}", e)))?;
@@ -56,6 +60,19 @@ impl Extractor {
                 )));
             }
 
+            // 禁止符号链接与特殊文件类型
+            if file
+                .unix_mode()
+                .map(|m| (m & 0o170000) == 0o120000)
+                .unwrap_or(false)
+            {
+                return Err(ManagerError::ExtractFailed(format!(
+                    "条目 {} 为符号链接，禁止解压：{}",
+                    i,
+                    file_path.display()
+                )));
+            }
+
             let should_exclude = exclude_patterns.iter().any(|pattern| {
                 let pat = Path::new(pattern);
                 file_path.starts_with(pat)
@@ -68,12 +85,20 @@ impl Extractor {
             let outpath = dest_dir.join(&file_path);
 
             if file.name().ends_with('/') {
-                std::fs::create_dir_all(&outpath)
-                    .map_err(|e| ManagerError::Io(format!("创建目录失败：{}", e)))?;
+                std::fs::create_dir_all(&outpath).map_err(|e| {
+                    ManagerError::from(std::io::Error::new(
+                        e.kind(),
+                        format!("创建目录失败：{}", e),
+                    ))
+                })?;
             } else {
                 if let Some(p) = outpath.parent() {
-                    std::fs::create_dir_all(p)
-                        .map_err(|e| ManagerError::Io(format!("创建父目录失败：{}", e)))?;
+                    std::fs::create_dir_all(p).map_err(|e| {
+                        ManagerError::from(std::io::Error::new(
+                            e.kind(),
+                            format!("创建父目录失败：{}", e),
+                        ))
+                    })?;
                 }
 
                 let mut tmp_path = outpath.with_extension("tmp");
@@ -84,11 +109,19 @@ impl Extractor {
                     tmp_path = outpath.with_extension(format!("tmp{}", tmp_idx));
                 }
 
-                let mut tmp_file = std::fs::File::create(&tmp_path)
-                    .map_err(|e| ManagerError::Io(format!("创建临时文件失败：{}", e)))?;
+                let mut tmp_file = std::fs::File::create(&tmp_path).map_err(|e| {
+                    ManagerError::from(std::io::Error::new(
+                        e.kind(),
+                        format!("创建临时文件失败：{}", e),
+                    ))
+                })?;
 
-                std::io::copy(&mut file, &mut tmp_file)
-                    .map_err(|e| ManagerError::Io(format!("写入临时文件失败：{}", e)))?;
+                let _ = std::io::copy(&mut file, &mut tmp_file).map_err(|e| {
+                    ManagerError::from(std::io::Error::new(
+                        e.kind(),
+                        format!("写入临时文件失败：{}", e),
+                    ))
+                })?;
 
                 match atomic_rename_or_copy(&tmp_path, &outpath) {
                     Ok(_) => {
@@ -97,7 +130,10 @@ impl Extractor {
                     }
                     Err(e) => {
                         let _ = std::fs::remove_file(&tmp_path);
-                        return Err(ManagerError::Io(format!("重命名或复制临时文件失败：{}", e)));
+                        return Err(ManagerError::from(std::io::Error::other(format!(
+                            "重命名或复制临时文件失败：{}",
+                            e
+                        ))));
                     }
                 }
             }
@@ -134,10 +170,14 @@ impl Extractor {
         );
 
         let tmp_dest = dest.with_extension("dll.tmp");
-        std::fs::copy(dll_path, &tmp_dest)
-            .map_err(|e| ManagerError::Io(format!("复制文件失败：{}", e)))?;
+        std::fs::copy(dll_path, &tmp_dest).map_err(|e| {
+            ManagerError::from(std::io::Error::new(
+                e.kind(),
+                format!("复制文件失败：{}", e),
+            ))
+        })?;
         atomic_rename_or_copy(&tmp_dest, &dest)
-            .map_err(|e| ManagerError::Io(format!("安装失败：{}", e)))?;
+            .map_err(|e| ManagerError::from(std::io::Error::other(format!("安装失败：{}", e))))?;
 
         Ok(())
     }
@@ -147,8 +187,12 @@ impl Extractor {
         let resourceex_dir = game_root.join("ResourceEx");
 
         if !resourceex_dir.exists() {
-            std::fs::create_dir_all(&resourceex_dir)
-                .map_err(|e| ManagerError::Io(format!("创建 ResourceEx 目录失败：{}", e)))?;
+            std::fs::create_dir_all(&resourceex_dir).map_err(|e| {
+                ManagerError::from(std::io::Error::new(
+                    e.kind(),
+                    format!("创建 ResourceEx 目录失败：{}", e),
+                ))
+            })?;
         }
 
         let filename = zip_path
@@ -157,10 +201,14 @@ impl Extractor {
         let dest = resourceex_dir.join(filename);
 
         let tmp_dest = dest.with_extension("zip.tmp");
-        std::fs::copy(zip_path, &tmp_dest)
-            .map_err(|e| ManagerError::Io(format!("复制文件失败：{}", e)))?;
+        std::fs::copy(zip_path, &tmp_dest).map_err(|e| {
+            ManagerError::from(std::io::Error::new(
+                e.kind(),
+                format!("复制文件失败：{}", e),
+            ))
+        })?;
         atomic_rename_or_copy(&tmp_dest, &dest)
-            .map_err(|e| ManagerError::Io(format!("安装失败：{}", e)))?;
+            .map_err(|e| ManagerError::from(std::io::Error::other(format!("安装失败：{}", e))))?;
 
         Ok(())
     }

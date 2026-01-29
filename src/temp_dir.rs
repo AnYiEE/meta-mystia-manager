@@ -39,7 +39,10 @@ fn cleanup_temp_dir(temp_dir: &Path) -> std::io::Result<()> {
 fn register_temp_dir_for_cleanup(path: PathBuf) -> std::io::Result<()> {
     let m = GLOBAL_TEMP_DIRS.get_or_init(|| Mutex::new(Vec::new()));
     {
-        let mut v = m.lock().unwrap();
+        let mut v = match m.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         if !v.contains(&path) {
             v.push(path.clone());
         }
@@ -48,7 +51,10 @@ fn register_temp_dir_for_cleanup(path: PathBuf) -> std::io::Result<()> {
     SET_CTRL_HANDLER.call_once(|| {
         let m_ref = GLOBAL_TEMP_DIRS.get_or_init(|| Mutex::new(Vec::new()));
         let _ = ctrlc::set_handler(move || {
-            let guard = m_ref.lock().unwrap();
+            let guard = match m_ref.lock() {
+                Ok(g) => g,
+                Err(poisoned) => poisoned.into_inner(),
+            };
             for p in guard.iter() {
                 let _ = std::fs::remove_dir_all(p);
             }
@@ -66,7 +72,10 @@ fn register_temp_dir_for_cleanup(path: PathBuf) -> std::io::Result<()> {
                 CTRL_C_EVENT | CTRL_BREAK_EVENT | CTRL_CLOSE_EVENT | CTRL_LOGOFF_EVENT
                 | CTRL_SHUTDOWN_EVENT => {
                     if let Some(m) = GLOBAL_TEMP_DIRS.get() {
-                        let guard = m.lock().unwrap();
+                        let guard = match m.lock() {
+                            Ok(g) => g,
+                            Err(poisoned) => poisoned.into_inner(),
+                        };
                         for p in guard.iter() {
                             let _ = std::fs::remove_dir_all(p);
                         }
@@ -94,7 +103,10 @@ fn register_temp_dir_for_cleanup(path: PathBuf) -> std::io::Result<()> {
 
 fn unregister_temp_dir(path: &Path) {
     if let Some(m) = GLOBAL_TEMP_DIRS.get() {
-        let mut v = m.lock().unwrap();
+        let mut v = match m.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         v.retain(|p| p != path);
     }
 }
@@ -103,7 +115,10 @@ pub fn create_temp_dir_with_guard(base: &Path) -> std::io::Result<(PathBuf, DirG
     let temp_dir = base.join(".meta-mystia-tmp");
 
     if let Some(m) = GLOBAL_TEMP_DIRS.get() {
-        let guard = m.lock().unwrap();
+        let guard = match m.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         if guard.contains(&temp_dir) {
             return Ok((temp_dir.clone(), DirGuard::from_existing(temp_dir)));
         }

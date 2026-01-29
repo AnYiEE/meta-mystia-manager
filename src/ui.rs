@@ -408,21 +408,30 @@ impl Ui for ConsoleUI {
             }
         };
 
-        let mut bars = self.bars.lock().unwrap();
+        let mut bars = match self.bars.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         bars.insert(id, pb);
 
         id
     }
 
     fn download_update(&self, id: usize, downloaded: u64) {
-        let bars = self.bars.lock().unwrap();
+        let bars = match self.bars.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         if let Some(pb) = bars.get(&id) {
             pb.set_position(downloaded);
         }
     }
 
     fn download_finish(&self, id: usize, message: &str) {
-        let mut bars = self.bars.lock().unwrap();
+        let mut bars = match self.bars.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         if let Some(pb) = bars.remove(&id) {
             pb.finish_with_message(message.to_string());
         }

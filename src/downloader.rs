@@ -10,7 +10,8 @@ use std::cmp;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 
 const FILE_API: &str = "https://file.izakaya.cc/api/public/dl";
 const REDIRECT_URL: &str = "https://url.izakaya.cc/getMetaMystia";
@@ -19,7 +20,7 @@ const VERSION_API: &str = "https://api.izakaya.cc/version/meta-mystia";
 const BEPINEX_PRIMARY: &str = "https://builds.bepinex.dev/projects/bepinex_be";
 const GITHUB_API_URL: &str = "https://api.github.com/repos/MetaMikuAI/MetaMystia/releases/latest";
 
-const RATE_LIMIT: usize = 192 * 1024; // 192KB/s
+const RATE_LIMIT: usize = 128 * 1024; // 128KB/s
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5); // 连接超时
 
 /// 下载器
@@ -71,12 +72,17 @@ impl<'a> Downloader<'a> {
 
     /// 获取版本信息
     pub fn get_version_info(&self) -> Result<VersionInfo> {
-        if let Some(cached) = self.cached_version.lock().unwrap().clone() {
+        if let Ok(lock) = self.cached_version.lock()
+            && let Some(cached) = lock.clone()
+        {
             return Ok(cached);
         }
 
         let vi = self.retry("获取版本信息", || self.try_get_version_info())?;
-        let mut lock = self.cached_version.lock().unwrap();
+        let mut lock = match self.cached_version.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         *lock = Some(vi.clone());
 
         Ok(vi)
@@ -222,8 +228,12 @@ impl<'a> Downloader<'a> {
         rate_limit: bool,
     ) -> Result<()> {
         if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| ManagerError::Io(format!("创建目录失败：{}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ManagerError::from(std::io::Error::new(
+                    e.kind(),
+                    format!("创建目录失败：{}", e),
+                ))
+            })?;
         }
 
         let mut tmp_path = dest.with_extension("dl.tmp");
@@ -233,40 +243,20 @@ impl<'a> Downloader<'a> {
             tmp_path = dest.with_extension(format!("dl.tmp{}", tmp_idx));
         }
 
-        let mut tmp_file = std::fs::File::create(&tmp_path)
-            .map_err(|e| ManagerError::Io(format!("创建临时文件失败：{}", e)))?;
+        let mut tmp_file = std::fs::File::create(&tmp_path).map_err(|e| {
+            ManagerError::from(std::io::Error::new(
+                e.kind(),
+                format!("创建临时文件失败：{}", e),
+            ))
+        })?;
 
         let buf_len = cmp::min(RATE_LIMIT, 8192) as usize;
         let mut buffer = vec![0; buf_len];
         let mut downloaded = 0u64;
-
-        let mut tokens = RATE_LIMIT as f64;
-        let mut last_check = std::time::Instant::now();
+        let start = Instant::now();
 
         loop {
-            let now = std::time::Instant::now();
-            let elapsed = now.duration_since(last_check).as_secs_f64();
-            last_check = now;
-            tokens += elapsed * RATE_LIMIT as f64;
-            if tokens > RATE_LIMIT as f64 {
-                tokens = RATE_LIMIT as f64;
-            }
-
-            let mut to_read = buffer.len();
-            if rate_limit {
-                let available = tokens.floor() as usize;
-                if available == 0 {
-                    let wait_secs = 1.0 / RATE_LIMIT as f64;
-                    let sleep_dur = if cfg!(test) {
-                        Duration::from_millis(1)
-                    } else {
-                        Duration::from_secs_f64(wait_secs)
-                    };
-                    std::thread::sleep(sleep_dur);
-                    continue;
-                }
-                to_read = std::cmp::min(to_read, available);
-            }
+            let to_read = buffer.len();
 
             let n = resp
                 .read(&mut buffer[..to_read])
@@ -275,24 +265,37 @@ impl<'a> Downloader<'a> {
                 break;
             }
 
-            tmp_file
-                .write_all(&buffer[..n])
-                .map_err(|e| ManagerError::Io(format!("写入临时文件失败：{}", e)))?;
-
-            if rate_limit {
-                tokens -= n as f64;
-                if tokens < 0.0 {
-                    tokens = 0.0;
-                }
-            }
-
+            tmp_file.write_all(&buffer[..n]).map_err(|e| {
+                ManagerError::from(std::io::Error::new(
+                    e.kind(),
+                    format!("写入临时文件失败：{}", e),
+                ))
+            })?;
             downloaded += n as u64;
             self.ui.download_update(id, downloaded);
+
+            if rate_limit {
+                let expected_secs = (downloaded as f64) / (RATE_LIMIT as f64);
+                let elapsed = start.elapsed().as_secs_f64();
+                if expected_secs > elapsed {
+                    let to_sleep = expected_secs - elapsed;
+                    let sleep_dur = if cfg!(test) {
+                        Duration::from_millis(1)
+                    } else {
+                        let ms = (to_sleep * 1000.0).max(1.0);
+                        Duration::from_millis(ms.ceil() as u64)
+                    };
+                    sleep(sleep_dur);
+                }
+            }
         }
 
-        tmp_file
-            .flush()
-            .map_err(|e| ManagerError::Io(format!("同步临时文件失败：{}", e)))?;
+        tmp_file.flush().map_err(|e| {
+            ManagerError::from(std::io::Error::new(
+                e.kind(),
+                format!("同步临时文件失败：{}", e),
+            ))
+        })?;
 
         match atomic_rename_or_copy(&tmp_path, dest) {
             Ok(_) => {
@@ -310,7 +313,10 @@ impl<'a> Downloader<'a> {
             }
             Err(e) => {
                 let _ = std::fs::remove_file(&tmp_path);
-                Err(ManagerError::Io(format!("重命名或复制临时文件失败：{}", e)))
+                Err(ManagerError::from(std::io::Error::other(format!(
+                    "重命名或复制临时文件失败：{}",
+                    e
+                ))))
             }
         }
     }

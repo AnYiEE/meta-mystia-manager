@@ -73,10 +73,8 @@ impl<'a> Installer<'a> {
         // 1. 删除 BepInEx 目录下的所有项目（跳过 plugins）
         let bepinex_dir = game_root.join("BepInEx");
         if bepinex_dir.exists() {
-            for entry in
-                std::fs::read_dir(&bepinex_dir).map_err(|e| ManagerError::Io(e.to_string()))?
-            {
-                let entry = entry.map_err(|e| ManagerError::Io(e.to_string()))?;
+            for entry in std::fs::read_dir(&bepinex_dir).map_err(ManagerError::from)? {
+                let entry = entry.map_err(ManagerError::from)?;
                 let path = entry.path();
                 let name = entry.file_name();
 
@@ -162,8 +160,12 @@ impl<'a> Installer<'a> {
         };
 
         // 3. 创建临时下载目录
-        let (temp_dir, _temp_guard) = create_temp_dir_with_guard(&self.game_root)
-            .map_err(|e| ManagerError::Io(format!("创建临时目录失败：{}", e)))?;
+        let (temp_dir, _temp_guard) = create_temp_dir_with_guard(&self.game_root).map_err(|e| {
+            ManagerError::from(std::io::Error::new(
+                e.kind(),
+                format!("创建临时目录失败：{}", e),
+            ))
+        })?;
 
         // 4. 下载文件
         self.ui.install_display_step(3, "下载必要文件");
