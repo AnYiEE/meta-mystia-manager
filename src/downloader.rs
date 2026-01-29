@@ -6,6 +6,7 @@ use crate::ui::Ui;
 
 use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
 use reqwest::blocking::{Client, ClientBuilder};
+use std::cmp;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Mutex;
@@ -235,7 +236,7 @@ impl<'a> Downloader<'a> {
         let mut tmp_file = std::fs::File::create(&tmp_path)
             .map_err(|e| ManagerError::Io(format!("创建临时文件失败：{}", e)))?;
 
-        let buf_len = std::cmp::min(RATE_LIMIT, 8192) as usize;
+        let buf_len = cmp::min(RATE_LIMIT, 8192) as usize;
         let mut buffer = vec![0; buf_len];
         let mut downloaded = 0u64;
 

@@ -1,4 +1,3 @@
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum UninstallMode {
     Light,
     Full,
@@ -42,7 +41,6 @@ pub const GAME_EXECUTABLE: &str = "Touhou Mystia Izakaya.exe";
 pub const GAME_PROCESS_NAME: &str = "Touhou Mystia Izakaya.exe";
 pub const GAME_STEAM_APP_ID: u32 = 1_584_090;
 
-#[derive(Clone, Copy, Debug)]
 pub struct NetworkRetryConfig {
     /// 最大重试次数（至少 1）
     pub attempts: usize,
@@ -69,7 +67,6 @@ pub fn network_retry_config() -> NetworkRetryConfig {
     NetworkRetryConfig::default()
 }
 
-#[derive(Clone, Copy, Debug)]
 pub struct UninstallRetryConfig {
     pub attempts: usize,
     pub base_delay_secs: u64,

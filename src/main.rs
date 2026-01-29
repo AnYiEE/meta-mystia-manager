@@ -19,7 +19,6 @@ use crate::downloader::Downloader;
 use crate::env_check::{check_game_directory, check_game_running};
 use crate::error::{ManagerError, Result};
 use crate::installer::Installer;
-use crate::model::VersionInfo;
 use crate::ui::OperationMode::*;
 use crate::ui::{ConsoleUI, Ui};
 use crate::uninstaller::Uninstaller;
@@ -52,7 +51,7 @@ fn run(ui: &dyn Ui) -> Result<()> {
     // 1. 显示欢迎信息
     ui.display_welcome()?;
 
-    let mut version_info: Option<VersionInfo> = None;
+    let mut version_info = None;
     let downloader = match Downloader::new(ui) {
         Ok(dl) => match dl.get_version_info() {
             Ok(vi) => {

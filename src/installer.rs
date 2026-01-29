@@ -7,7 +7,7 @@ use crate::temp_dir::create_temp_dir_with_guard;
 use crate::ui::Ui;
 
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// 安装管理器
 pub struct Installer<'a> {
@@ -59,7 +59,7 @@ impl<'a> Installer<'a> {
     }
 
     /// 执行安装前的清理：全量卸载但保留 BepInEx/plugins（除了 MetaMystia DLL）
-    fn execute_install_cleanup(game_root: &std::path::Path, ui: &dyn Ui) -> Result<(usize, usize)> {
+    fn execute_install_cleanup(game_root: &Path, ui: &dyn Ui) -> Result<(usize, usize)> {
         let mut targets = Vec::new();
         let mut seen = HashSet::new();
 

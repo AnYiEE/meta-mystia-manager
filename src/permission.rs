@@ -31,7 +31,7 @@ impl Drop for TokenHandle {
 /// 检查当前进程是否具有管理员权限
 pub fn is_elevated() -> Result<bool> {
     unsafe {
-        let mut token: HANDLE = HANDLE::default();
+        let mut token = HANDLE::default();
 
         if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
             return Ok(false);

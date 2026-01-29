@@ -2,7 +2,7 @@ use crate::error::{ManagerError, Result};
 
 use serde::Deserialize;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct VersionInfo {
     #[serde(rename = "bepInEx")]
     pub bep_in_ex: String,

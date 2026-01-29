@@ -9,16 +9,19 @@ use std::path::{Path, PathBuf};
 #[allow(clippy::permissions_set_readonly_false)]
 fn ensure_owner_writable(metadata: &std::fs::Metadata) -> std::fs::Permissions {
     let mut perms = metadata.permissions();
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mode = perms.mode() | 0o200; // ensure owner write bit set
+        let mode = perms.mode() | 0o200;
         perms.set_mode(mode);
     }
+
     #[cfg(not(unix))]
     {
         perms.set_readonly(false);
     }
+
     perms
 }
 
@@ -95,7 +98,6 @@ fn normalize_path_for_glob(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
-#[derive(Debug)]
 pub struct RemoveGlobResult {
     pub removed: Vec<PathBuf>,
     pub failed: Vec<(PathBuf, io::Error)>,
@@ -157,21 +159,21 @@ pub fn glob_matches(pattern: &Path) -> Vec<PathBuf> {
     matches
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum DeletionStatus {
     Success,
     Failed(ManagerError),
     Skipped,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct DeletionResult {
     pub path: PathBuf,
     pub status: DeletionStatus,
 }
 
 /// 扫描实际存在的文件
-pub fn scan_existing_files(base: &std::path::Path, mode: UninstallMode) -> Vec<PathBuf> {
+pub fn scan_existing_files(base: &Path, mode: UninstallMode) -> Vec<PathBuf> {
     let targets = mode.get_targets();
     let mut existing_files = Vec::new();
 
@@ -183,12 +185,7 @@ pub fn scan_existing_files(base: &std::path::Path, mode: UninstallMode) -> Vec<P
 }
 
 /// 扫描单个删除目标
-fn scan_target(
-    base: &std::path::Path,
-    pattern: &str,
-    is_directory: bool,
-    existing_files: &mut Vec<PathBuf>,
-) {
+fn scan_target(base: &Path, pattern: &str, is_directory: bool, existing_files: &mut Vec<PathBuf>) {
     let target_path = base.join(pattern);
     let path_str = normalize_path_for_glob(&target_path);
 

@@ -11,7 +11,6 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// 操作模式枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperationMode {
     Install,
     Upgrade,
@@ -34,12 +33,7 @@ pub trait Ui: Send + Sync {
     fn error(&self, text: &str) -> Result<()>;
 
     // 目录相关
-    fn path_display_steam_found(
-        &self,
-        app_id: u32,
-        name: Option<&str>,
-        path: &std::path::Path,
-    ) -> Result<()>;
+    fn path_display_steam_found(&self, app_id: u32, name: Option<&str>, path: &Path) -> Result<()>;
     fn path_confirm_use_steam_found(&self) -> Result<bool>;
 
     // 安装相关
@@ -202,12 +196,7 @@ impl Ui for ConsoleUI {
         Ok(())
     }
 
-    fn path_display_steam_found(
-        &self,
-        app_id: u32,
-        name: Option<&str>,
-        path: &std::path::Path,
-    ) -> Result<()> {
+    fn path_display_steam_found(&self, app_id: u32, name: Option<&str>, path: &Path) -> Result<()> {
         path_display_steam_found(app_id, name, path)
     }
 
@@ -673,7 +662,7 @@ fn wait_for_key() -> Result<()> {
 
 // ==================== 目录相关 UI ====================
 
-fn path_display_steam_found(app_id: u32, name: Option<&str>, path: &std::path::Path) -> Result<()> {
+fn path_display_steam_found(app_id: u32, name: Option<&str>, path: &Path) -> Result<()> {
     println!(
         "{}",
         style(format!(

@@ -57,7 +57,7 @@ impl Extractor {
             }
 
             let should_exclude = exclude_patterns.iter().any(|pattern| {
-                let pat = std::path::Path::new(pattern);
+                let pat = Path::new(pattern);
                 file_path.starts_with(pat)
             });
 

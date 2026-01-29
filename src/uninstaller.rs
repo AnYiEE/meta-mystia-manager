@@ -6,7 +6,10 @@ use crate::file_ops::{
 use crate::permission::{elevate_and_restart, is_elevated};
 use crate::ui::Ui;
 
+use std::collections::HashSet;
 use std::path::PathBuf;
+use std::thread::sleep;
+use std::time::Duration;
 
 /// 卸载管理器
 pub struct Uninstaller<'a> {
@@ -53,9 +56,9 @@ impl<'a> Uninstaller<'a> {
                 break;
             }
 
-            let mut in_use_failures: Vec<std::path::PathBuf> = Vec::new();
-            let mut perm_failures: Vec<std::path::PathBuf> = Vec::new();
-            let mut other_failures: Vec<std::path::PathBuf> = Vec::new();
+            let mut in_use_failures = Vec::new();
+            let mut perm_failures = Vec::new();
+            let mut other_failures = Vec::new();
 
             for p in &failed_files {
                 if let Some(r) = all_results.iter().find(|r| &r.path == p) {
@@ -90,7 +93,7 @@ impl<'a> Uninstaller<'a> {
                     self.ui
                         .uninstall_wait_before_retry(delay_secs, attempt + 1, cfg.attempts)?;
 
-                    std::thread::sleep(std::time::Duration::from_secs(delay_secs));
+                    sleep(Duration::from_secs(delay_secs));
 
                     let retry_results = execute_deletion(&still_in_use, self.ui);
 
@@ -137,11 +140,10 @@ impl<'a> Uninstaller<'a> {
 
             self.ui.uninstall_retrying_failed_items()?;
 
-            use std::collections::HashSet;
             let mut seen = HashSet::new();
-            let mut retry_list: Vec<std::path::PathBuf> = Vec::new();
+            let mut retry_list = Vec::new();
 
-            let order: Vec<&Vec<std::path::PathBuf>> = if is_elevated {
+            let order = if is_elevated {
                 vec![&perm_failures, &other_failures]
             } else {
                 vec![&other_failures, &perm_failures]
