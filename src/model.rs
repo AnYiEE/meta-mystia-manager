@@ -39,4 +39,9 @@ impl VersionInfo {
     pub fn resourceex_filename(&self) -> String {
         format!("ResourceExample-v{}.zip", self.zip.trim())
     }
+
+    //// MetaMystia Manager 可执行文件名
+    pub fn manager_filename(&self) -> String {
+        format!("meta-mystia-manager-v{}.exe", self.manager.trim())
+    }
 }

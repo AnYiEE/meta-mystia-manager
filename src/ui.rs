@@ -139,6 +139,12 @@ pub trait Ui: Send + Sync {
         err: &str,
     ) -> Result<()>;
     fn network_rate_limited(&self, secs: u64) -> Result<()>;
+
+    // 自升级相关
+    fn manager_ask_self_update(&self, current_version: &str, latest_version: &str) -> Result<bool>;
+    fn manager_update_starting(&self) -> Result<()>;
+    fn manager_update_failed(&self, err: &str) -> Result<()>;
+    fn manager_prompt_manual_update(&self) -> Result<()>;
 }
 
 pub struct ConsoleUI {
@@ -507,6 +513,22 @@ impl Ui for ConsoleUI {
     fn network_rate_limited(&self, secs: u64) -> Result<()> {
         network_rate_limited(secs)
     }
+
+    fn manager_ask_self_update(&self, current_version: &str, latest_version: &str) -> Result<bool> {
+        manager_ask_self_update(current_version, latest_version)
+    }
+
+    fn manager_update_starting(&self) -> Result<()> {
+        manager_update_starting()
+    }
+
+    fn manager_update_failed(&self, err: &str) -> Result<()> {
+        manager_update_failed(err)
+    }
+
+    fn manager_prompt_manual_update(&self) -> Result<()> {
+        manager_prompt_manual_update()
+    }
 }
 
 // ==================== 通用 UI ====================
@@ -548,6 +570,55 @@ fn display_version(manager_version: Option<&str>) -> Result<()> {
     println!("{}", style("═".repeat(60)).cyan());
     println!();
 
+    Ok(())
+}
+
+// ==================== 自升级相关 UI ====================
+
+fn manager_ask_self_update(current_version: &str, latest_version: &str) -> Result<bool> {
+    println!(
+        "管理工具可以升级：{} -> {}",
+        style(current_version).green(),
+        style(latest_version).green()
+    );
+    println!();
+
+    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(" 是否立即升级？")
+        .default(false)
+        .interact_on_opt(&Term::stdout())?;
+
+    match confirmed {
+        Some(true) => {
+            println!();
+            Ok(true)
+        }
+        _ => {
+            println!();
+            Ok(false)
+        }
+    }
+}
+
+fn manager_update_starting() -> Result<()> {
+    println!();
+    println!("正在启动升级脚本，请稍候...");
+    println!();
+    Ok(())
+}
+
+fn manager_update_failed(err: &str) -> Result<()> {
+    println!();
+    println!("{}", style(format!("升级失败：{}", err)).red());
+    println!("请手动下载并升级管理工具。");
+    println!();
+    Ok(())
+}
+
+fn manager_prompt_manual_update() -> Result<()> {
+    println!();
+    println!("无法向当前运行目录写入文件，请手动下载并升级管理工具。");
+    println!();
     Ok(())
 }
 

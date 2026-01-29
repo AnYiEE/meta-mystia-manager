@@ -440,4 +440,13 @@ impl<'a> Downloader<'a> {
             }
         }
     }
+
+    /// 下载管理工具可执行文件
+    pub fn download_manager(&self, version_info: &VersionInfo, dest: &Path) -> Result<()> {
+        let filename = version_info.manager_filename();
+        let share_code = self.get_share_code()?;
+        let url = Self::file_api_url(&share_code, &filename);
+
+        self.download_file_with_progress(&url, dest, None, true)
+    }
 }

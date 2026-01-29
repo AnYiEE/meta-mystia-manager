@@ -11,6 +11,7 @@ mod permission;
 mod temp_dir;
 mod ui;
 mod uninstaller;
+mod updater;
 mod upgrader;
 
 use crate::config::GAME_EXECUTABLE;
@@ -18,9 +19,11 @@ use crate::downloader::Downloader;
 use crate::env_check::{check_game_directory, check_game_running};
 use crate::error::{ManagerError, Result};
 use crate::installer::Installer;
+use crate::model::VersionInfo;
 use crate::ui::OperationMode::*;
 use crate::ui::{ConsoleUI, Ui};
 use crate::uninstaller::Uninstaller;
+use crate::updater::perform_self_update;
 use crate::upgrader::Upgrader;
 
 use std::path::PathBuf;
@@ -48,18 +51,38 @@ fn main() -> ExitCode {
 fn run(ui: &dyn Ui) -> Result<()> {
     // 1. 显示欢迎信息
     ui.display_welcome()?;
-    let mut manager_version: Option<String> = None;
-    if let Ok(downloader) = Downloader::new(ui) {
-        match downloader.get_version_info() {
+
+    let mut version_info: Option<VersionInfo> = None;
+    let downloader = match Downloader::new(ui) {
+        Ok(dl) => match dl.get_version_info() {
             Ok(vi) => {
-                manager_version = Some(vi.manager);
+                version_info = Some(vi);
+                Some(dl)
             }
             Err(e) => {
                 let _ = ui.message(&format!("无法获取版本信息：{}", e));
+                None
+            }
+        },
+        _ => None,
+    };
+
+    ui.display_version(version_info.as_ref().map(|vi| vi.manager.as_str()))?;
+
+    // 自升级提示
+    if let (Some(downloader), Some(vi)) = (downloader.as_ref(), version_info.as_ref()) {
+        let current_version = env!("CARGO_PKG_VERSION");
+        if current_version != vi.manager {
+            if ui.manager_ask_self_update(current_version, &vi.manager)? {
+                match perform_self_update(&std::env::current_dir()?, ui, downloader, vi) {
+                    Ok(()) => {
+                        std::process::exit(0);
+                    }
+                    Err(e) => ui.manager_update_failed(&format!("{}", e))?,
+                }
             }
         }
     }
-    ui.display_version(manager_version.as_deref())?;
 
     // 2. 目录环境检查
     let game_root = match check_game_directory(ui) {
