@@ -1,6 +1,6 @@
 use crate::config::UninstallMode;
 use crate::error::Result;
-use crate::metrics::report_event;
+use crate::metrics::{get_user_id, report_event};
 use crate::model::VersionInfo;
 
 use console::{Term, style};
@@ -549,9 +549,12 @@ fn display_welcome() -> Result<()> {
         env!("CARGO_PKG_VERSION")
     );
 
+    let user_id = get_user_id();
+    print!("{}", " ".repeat(14));
+    println!("{}", style(user_id).dim());
+
     println!("{}", style("═".repeat(60)).cyan());
     println!();
-
     Ok(())
 }
 

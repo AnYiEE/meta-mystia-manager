@@ -67,7 +67,7 @@ fn md5_hex(input: &str) -> String {
 
 static CACHED_USER_ID: OnceLock<String> = OnceLock::new();
 
-fn get_user_id() -> String {
+pub fn get_user_id() -> String {
     CACHED_USER_ID
         .get_or_init(|| {
             if let Some(guid) = read_machine_guid() {
