@@ -1,5 +1,6 @@
 use crate::config::{GAME_EXECUTABLE, GAME_PROCESS_NAME, GAME_STEAM_APP_ID};
 use crate::error::{ManagerError, Result};
+use crate::metrics::report_event;
 use crate::ui::Ui;
 
 use std::path::PathBuf;
@@ -43,6 +44,7 @@ pub fn check_game_directory(ui: &dyn Ui) -> Result<PathBuf> {
         if candidate.join(GAME_EXECUTABLE).is_file() {
             ui.path_display_steam_found(app.app_id, app.name.as_deref(), &candidate)?;
             if ui.path_confirm_use_steam_found()? {
+                report_event("Env.SteamFound", Some(&candidate.to_string_lossy()));
                 ui.blank_line()?;
                 return Ok(candidate);
             } else {
@@ -54,9 +56,11 @@ pub fn check_game_directory(ui: &dyn Ui) -> Result<PathBuf> {
     let current_dir = std::env::current_dir()?;
     let game_exe = current_dir.join(GAME_EXECUTABLE);
     if game_exe.is_file() {
+        report_event("Env.CurrentDirFound", Some(&current_dir.to_string_lossy()));
         return Ok(current_dir);
     }
 
+    report_event("Env.GameNotFound", None);
     Err(ManagerError::GameNotFound)
 }
 
@@ -97,6 +101,7 @@ pub fn check_game_running() -> Result<bool> {
             );
 
             if process_name.to_lowercase() == target {
+                report_event("Env.GameRunning", None);
                 return Ok(true);
             }
 

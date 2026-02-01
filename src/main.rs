@@ -20,6 +20,7 @@ use crate::downloader::Downloader;
 use crate::env_check::{check_game_directory, check_game_running};
 use crate::error::{ManagerError, Result};
 use crate::installer::Installer;
+use crate::metrics::report_event;
 use crate::ui::OperationMode::*;
 use crate::ui::{ConsoleUI, Ui};
 use crate::uninstaller::Uninstaller;
@@ -49,6 +50,8 @@ fn main() -> ExitCode {
 }
 
 fn run(ui: &dyn Ui) -> Result<()> {
+    report_event("Run", Some(env!("CARGO_PKG_VERSION")));
+
     // 1. 显示欢迎信息
     ui.display_welcome()?;
 

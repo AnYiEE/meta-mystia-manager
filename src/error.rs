@@ -1,3 +1,5 @@
+use crate::metrics::report_event;
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -47,18 +49,24 @@ pub enum ManagerError {
 
 impl From<anyhow::Error> for ManagerError {
     fn from(err: anyhow::Error) -> Self {
-        ManagerError::Other(err.to_string())
+        let s = err.to_string();
+        report_event("Error.From.Anyhow", Some(&s));
+        ManagerError::Other(s)
     }
 }
 
 impl From<dialoguer::Error> for ManagerError {
     fn from(err: dialoguer::Error) -> Self {
-        ManagerError::Dialog(err.to_string())
+        let s = err.to_string();
+        report_event("Error.From.Dialog", Some(&s));
+        ManagerError::Dialog(s)
     }
 }
 
 impl From<std::io::Error> for ManagerError {
     fn from(err: std::io::Error) -> Self {
+        let s = err.to_string();
+        report_event("Error.From.Io", Some(&s));
         ManagerError::Io(err)
     }
 }

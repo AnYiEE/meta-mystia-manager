@@ -1,5 +1,6 @@
 use crate::config::UninstallMode;
 use crate::error::ManagerError;
+use crate::metrics::report_event;
 use crate::ui::Ui;
 
 use glob::glob;
@@ -45,9 +46,21 @@ pub fn atomic_rename_or_copy(src: &Path, dst: &Path) -> Result<(), ManagerError>
         std::fs::create_dir_all(parent).map_err(ManagerError::from)?;
     }
 
+    report_event(
+        "FileOps.RenameAttempt",
+        Some(&format!("{}->{}", src.display(), dst.display())),
+    );
+
     match std::fs::rename(src, dst) {
-        Ok(_) => Ok(()),
+        Ok(_) => {
+            report_event("FileOps.RenameSuccess", Some(&dst.display().to_string()));
+            Ok(())
+        }
         Err(rename_err) => {
+            report_event(
+                "FileOps.RenameFallback",
+                Some(&format!("{};err={}", dst.display(), rename_err)),
+            );
             let mut tmp_path = dst.with_extension("tmp");
             let mut tmp_idx = 0;
             while tmp_path.exists() {
@@ -56,6 +69,10 @@ pub fn atomic_rename_or_copy(src: &Path, dst: &Path) -> Result<(), ManagerError>
             }
 
             std::fs::copy(src, &tmp_path).map_err(|e| {
+                report_event(
+                    "FileOps.RenameFallbackFailed",
+                    Some(&format!("{};err={}", tmp_path.display(), e)),
+                );
                 ManagerError::from(std::io::Error::other(format!(
                     "重命名失败：{}；复制到临时文件失败：{}",
                     rename_err, e
@@ -68,11 +85,19 @@ pub fn atomic_rename_or_copy(src: &Path, dst: &Path) -> Result<(), ManagerError>
 
             match std::fs::rename(&tmp_path, dst) {
                 Ok(_) => {
-                    std::fs::remove_file(src).map_err(ManagerError::from)?;
+                    let _ = std::fs::remove_file(src);
+                    report_event(
+                        "FileOps.RenameFallbackSuccess",
+                        Some(&dst.display().to_string()),
+                    );
                     Ok(())
                 }
                 Err(e) => {
                     let _ = std::fs::remove_file(&tmp_path);
+                    report_event(
+                        "FileOps.RenameFinalFailed",
+                        Some(&format!("{};err={}", dst.display(), e)),
+                    );
                     Err(ManagerError::from(std::io::Error::other(format!(
                         "重命名或替换目标失败：{}",
                         e
@@ -143,8 +168,17 @@ pub fn remove_glob_files(pattern: &Path) -> RemoveGlobResult {
                 };
 
                 match res {
-                    Ok(_) => removed.push(entry),
-                    Err(e) => failed.push((entry, ManagerError::from(e))),
+                    Ok(_) => {
+                        report_event("FileOps.Remove.Success", Some(&entry.to_string_lossy()));
+                        removed.push(entry)
+                    }
+                    Err(e) => {
+                        report_event(
+                            "FileOps.Remove.Failed",
+                            Some(&format!("{};err={}", entry.to_string_lossy(), e)),
+                        );
+                        failed.push((entry, ManagerError::from(e)))
+                    }
                 }
             }
         }
@@ -237,6 +271,7 @@ pub fn execute_deletion(files: &[PathBuf], ui: &dyn Ui) -> Vec<DeletionResult> {
 
     for (index, path) in files.iter().enumerate() {
         ui.deletion_display_progress(index + 1, total, &path.to_string_lossy());
+        report_event("FileOps.Delete.Start", Some(&path.to_string_lossy()));
 
         let result = if path.is_dir() {
             delete_directory(path)
@@ -245,11 +280,21 @@ pub fn execute_deletion(files: &[PathBuf], ui: &dyn Ui) -> Vec<DeletionResult> {
         };
 
         match &result.status {
-            DeletionStatus::Success => ui.deletion_display_success(&path.to_string_lossy()),
-            DeletionStatus::Failed(error) => {
-                ui.deletion_display_failure(&path.to_string_lossy(), &error.to_string())
+            DeletionStatus::Success => {
+                ui.deletion_display_success(&path.to_string_lossy());
+                report_event("FileOps.Delete.Success", Some(&path.to_string_lossy()));
             }
-            DeletionStatus::Skipped => ui.deletion_display_skipped(&path.to_string_lossy()),
+            DeletionStatus::Failed(error) => {
+                ui.deletion_display_failure(&path.to_string_lossy(), &error.to_string());
+                report_event(
+                    "FileOps.Delete.Failed",
+                    Some(&format!("{};err={}", path.to_string_lossy(), error)),
+                );
+            }
+            DeletionStatus::Skipped => {
+                ui.deletion_display_skipped(&path.to_string_lossy());
+                report_event("FileOps.Delete.Skipped", Some(&path.to_string_lossy()));
+            }
         }
 
         results.push(result);

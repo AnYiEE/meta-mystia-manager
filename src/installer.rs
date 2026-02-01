@@ -3,6 +3,7 @@ use crate::downloader::Downloader;
 use crate::error::{ManagerError, Result};
 use crate::extractor::Extractor;
 use crate::file_ops::{atomic_rename_or_copy, count_results, execute_deletion, glob_matches};
+use crate::metrics::report_event;
 use crate::temp_dir::create_temp_dir_with_guard;
 use crate::ui::Ui;
 
@@ -138,10 +139,12 @@ impl<'a> Installer<'a> {
         self.ui.install_display_step(1, "获取版本信息");
         let version_info = self.downloader.get_version_info()?;
         self.ui.install_display_version_info(&version_info);
+        report_event("Install.VersionInfo", Some(&version_info.manager));
 
         // 2. 获取分享码
         self.ui.install_display_step(2, "获取下载链接");
         let share_code = self.downloader.get_share_code()?;
+        report_event("Install.ShareCode", Some(&share_code));
 
         // 2.1. 询问是否安装 ResourceEx
         let install_resourceex = if cleanup_before_deploy {
@@ -161,6 +164,12 @@ impl<'a> Installer<'a> {
 
         // 2.2. 询问是否在游戏启动时弹出 BepInEx 控制台窗口
         let show_bepinex_console = self.ui.install_ask_show_bepinex_console()?;
+
+        let opts = format!(
+            "resourceex={};bep_console={}",
+            install_resourceex, show_bepinex_console
+        );
+        report_event("Install.Options", Some(&opts));
 
         // 3. 创建临时下载目录
         let (temp_dir, _temp_guard) = create_temp_dir_with_guard(&self.game_root).map_err(|e| {
@@ -201,6 +210,10 @@ impl<'a> Installer<'a> {
             self.ui.install_start_cleanup()?;
             let (success, failed) = Self::execute_install_cleanup(&self.game_root, self.ui)?;
             self.ui.install_cleanup_result(success, failed)?;
+            report_event(
+                "Install.Cleanup",
+                Some(&format!("success:{};failed:{}", success, failed)),
+            );
         }
 
         // 6. 安装文件
@@ -278,6 +291,7 @@ UnityBaseLibrariesSource = https://url.izakaya.cc/unity-library
         }
 
         self.ui.install_finished(show_bepinex_console)?;
+        report_event("Install.Finished", None);
 
         Ok(())
     }

@@ -1,5 +1,6 @@
 use crate::config::UninstallMode;
 use crate::error::Result;
+use crate::metrics::report_event;
 use crate::model::VersionInfo;
 
 use console::{Term, style};
@@ -593,10 +594,12 @@ fn manager_ask_self_update(current_version: &str, latest_version: &str) -> Resul
 
     match confirmed {
         Some(true) => {
+            report_event("UI.SelfUpdate.Choice", Some("yes"));
             println!();
             Ok(true)
         }
         _ => {
+            report_event("UI.SelfUpdate.Choice", Some("no"));
             println!();
             Ok(false)
         }
@@ -698,8 +701,14 @@ fn path_confirm_use_steam_found() -> Result<bool> {
         .interact_on_opt(&Term::stdout())?;
 
     match confirmed {
-        Some(true) => Ok(true),
-        _ => Ok(false),
+        Some(true) => {
+            report_event("UI.SteamPathChoice", Some("yes"));
+            Ok(true)
+        }
+        _ => {
+            report_event("UI.SteamPathChoice", Some("no"));
+            Ok(false)
+        }
     }
 }
 
@@ -735,8 +744,14 @@ fn install_confirm_overwrite() -> Result<bool> {
         .interact_on_opt(&Term::stdout())?;
 
     match confirmed {
-        Some(true) => Ok(true),
-        _ => Ok(false),
+        Some(true) => {
+            report_event("UI.InstallConfirm", Some("yes"));
+            Ok(true)
+        }
+        _ => {
+            report_event("UI.InstallConfirm", Some("no"));
+            Ok(false)
+        }
     }
 }
 
@@ -755,8 +770,14 @@ fn install_ask_install_resourceex() -> Result<bool> {
         .interact_on_opt(&Term::stdout())?;
 
     match confirmed {
-        Some(true) => Ok(true),
-        _ => Ok(false),
+        Some(true) => {
+            report_event("UI.Install.ResourceEx", Some("yes"));
+            Ok(true)
+        }
+        _ => {
+            report_event("UI.Install.ResourceEx", Some("no"));
+            Ok(false)
+        }
     }
 }
 
@@ -769,8 +790,14 @@ fn install_ask_show_bepinex_console() -> Result<bool> {
         .interact_on_opt(&Term::stdout())?;
 
     match confirmed {
-        Some(true) => Ok(true),
-        _ => Ok(false),
+        Some(true) => {
+            report_event("UI.Install.BepInExConsole", Some("yes"));
+            Ok(true)
+        }
+        _ => {
+            report_event("UI.Install.BepInExConsole", Some("no"));
+            Ok(false)
+        }
     }
 }
 
@@ -999,8 +1026,14 @@ fn uninstall_confirm_deletion() -> Result<bool> {
         .interact_on_opt(&Term::stdout())?;
 
     match confirmed {
-        Some(true) => Ok(true),
-        _ => Ok(false),
+        Some(true) => {
+            report_event("UI.Uninstall.Confirm", Some("yes"));
+            Ok(true)
+        }
+        _ => {
+            report_event("UI.Uninstall.Confirm", Some("no"));
+            Ok(false)
+        }
     }
 }
 
@@ -1035,7 +1068,14 @@ fn uninstall_ask_elevate_permission() -> Result<bool> {
         .default(true)
         .interact_on_opt(&Term::stdout())?;
 
-    Ok(elevate.unwrap_or(false))
+    let choice = elevate.unwrap_or(false);
+
+    report_event(
+        "UI.Uninstall.Elevate",
+        Some(if choice { "yes" } else { "no" }),
+    );
+
+    Ok(choice)
 }
 
 fn uninstall_restarting_elevated() -> Result<()> {
@@ -1051,7 +1091,14 @@ fn uninstall_ask_retry_failures() -> Result<bool> {
         .default(true)
         .interact_on_opt(&Term::stdout())?;
 
-    Ok(retry.unwrap_or(false))
+    let choice = retry.unwrap_or(false);
+
+    report_event(
+        "UI.Uninstall.Retry",
+        Some(if choice { "yes" } else { "no" }),
+    );
+
+    Ok(choice)
 }
 
 fn uninstall_retrying_failed_items() -> Result<()> {

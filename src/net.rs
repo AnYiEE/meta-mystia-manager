@@ -1,5 +1,6 @@
 use crate::config::network_retry_config;
 use crate::error::{ManagerError, Result};
+use crate::metrics::report_event;
 use crate::ui::Ui;
 
 use reqwest::blocking::{Client, Response};
@@ -28,6 +29,15 @@ where
                     cfg.attempts,
                     &format!("{}", e),
                 )?;
+                report_event(
+                    "Network.Retry",
+                    Some(&format!(
+                        "{};attempt={};delay={}",
+                        op_desc,
+                        attempt + 1,
+                        delay_secs
+                    )),
+                );
 
                 sleep(Duration::from_secs(delay_secs));
             }
@@ -56,10 +66,21 @@ fn check_response_status(resp: &Response, ui: &dyn Ui, op_desc: &str) -> Result<
         if retry_after.is_some_and(|s| s <= 30) {
             let s = retry_after.unwrap();
             ui.network_rate_limited(s)?;
+            report_event(
+                "Network.RateLimited",
+                Some(&format!("{};retry_after={}", op_desc, s)),
+            );
             sleep(Duration::from_secs(s));
+        } else {
+            report_event("Network.RateLimited", Some(op_desc));
         }
         return Err(ManagerError::RateLimited(op_desc.to_string()));
     }
+
+    report_event(
+        "Network.HttpError",
+        Some(&format!("{};status={}", op_desc, resp.status())),
+    );
 
     Err(ManagerError::NetworkError(format!(
         "{}返回错误：HTTP {}",
@@ -88,12 +109,21 @@ pub fn get_json_with_retry<T: DeserializeOwned>(
 
         check_response_status(&resp, ui, op_desc)?;
 
-        let text = resp
-            .text()
-            .map_err(|e| ManagerError::NetworkError(format!("读取响应失败：{}", e)))?;
+        let text = resp.text().map_err(|e| {
+            report_event(
+                "Network.ReadFailed",
+                Some(&format!("{};err={}", op_desc, e)),
+            );
+            ManagerError::NetworkError(format!("读取响应失败：{}", e))
+        })?;
 
-        serde_json::from_str(&text)
-            .map_err(|e| ManagerError::NetworkError(format!("解析 JSON 失败：{}", e)))
+        serde_json::from_str(&text).map_err(|e| {
+            report_event(
+                "Network.JsonParseFailed",
+                Some(&format!("{};err={}", op_desc, e)),
+            );
+            ManagerError::NetworkError(format!("解析 JSON 失败：{}", e))
+        })
     })
 }
 

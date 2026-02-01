@@ -1,4 +1,5 @@
 use crate::error::{ManagerError, Result};
+use crate::metrics::report_event;
 
 use serde::Deserialize;
 
@@ -18,7 +19,10 @@ impl VersionInfo {
             .split('#')
             .nth(1)
             .map(|s| s.trim())
-            .ok_or(ManagerError::InvalidVersionInfo)
+            .ok_or_else(|| {
+                report_event("Model.VersionInfo.Invalid", Some("bepinex_filename"));
+                ManagerError::InvalidVersionInfo
+            })
     }
 
     /// 解析 BepInEx 的版本号
@@ -27,7 +31,10 @@ impl VersionInfo {
             .split('#')
             .nth(0)
             .map(|s| s.trim())
-            .ok_or(ManagerError::InvalidVersionInfo)
+            .ok_or_else(|| {
+                report_event("Model.VersionInfo.Invalid", Some("bepinex_version"));
+                ManagerError::InvalidVersionInfo
+            })
     }
 
     /// MetaMystia DLL 文件名

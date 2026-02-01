@@ -3,6 +3,7 @@ use crate::error::{ManagerError, Result};
 use crate::file_ops::{
     atomic_rename_or_copy, backup_paths_with_index, glob_matches, remove_glob_files,
 };
+use crate::metrics::report_event;
 use crate::temp_dir::create_temp_dir_with_guard;
 use crate::ui::Ui;
 
@@ -184,6 +185,14 @@ impl<'a> Upgrader<'a> {
                 None => ("".to_string(), PathBuf::new()),
             };
 
+        report_event(
+            "Upgrade.Detected",
+            Some(&format!(
+                "dll:{};resourceex:{}",
+                current_dll_version, current_resourceex_version
+            )),
+        );
+
         // 检查是否已安装 ResourceExample ZIP
         let has_resourceex = !current_resourceex_version.is_empty();
         if has_resourceex {
@@ -193,6 +202,7 @@ impl<'a> Upgrader<'a> {
         // 2. 获取最新版本信息
         self.ui.blank_line()?;
         let version_info = self.downloader.get_version_info()?;
+        report_event("Upgrade.VersionInfo", Some(&version_info.manager));
 
         // 检查 MetaMystia DLL 是否需要升级
         let new_dll_version = &version_info.dll;
@@ -322,6 +332,7 @@ impl<'a> Upgrader<'a> {
             })?;
 
             self.ui.upgrade_install_success(&new_dll_path)?;
+            report_event("Upgrade.Dll.Installed", Some(&filename));
 
             if backup_paths.is_empty() {
                 None
@@ -372,6 +383,7 @@ impl<'a> Upgrader<'a> {
             })?;
 
             self.ui.upgrade_install_success(&new_zip_path)?;
+            report_event("Upgrade.ResourceEx.Installed", Some(&filename));
         }
 
         // 7. 清理临时文件
@@ -379,6 +391,7 @@ impl<'a> Upgrader<'a> {
         self.cleanup_old_files()?;
 
         self.ui.upgrade_done()?;
+        report_event("Upgrade.Finished", None);
 
         Ok(())
     }

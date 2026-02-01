@@ -1,5 +1,6 @@
 use crate::error::{ManagerError, Result};
 use crate::file_ops::atomic_rename_or_copy;
+use crate::metrics::report_event;
 use crate::model::VersionInfo;
 use crate::net::{get_json_with_retry, get_response_with_retry, with_retry};
 use crate::ui::Ui;
@@ -114,19 +115,22 @@ impl<'a> Downloader<'a> {
             )));
         }
 
-        self.ui.download_version_info_success()?;
-
         let text = response
             .text()
             .map_err(|e| ManagerError::NetworkError(format!("读取响应失败：{}", e)))?;
 
-        serde_json::from_str(&text).map_err(|e| {
+        let vi: VersionInfo = serde_json::from_str(&text).map_err(|e| {
             let snippet: String = text.chars().take(200).collect();
             let _ = self
                 .ui
                 .download_version_info_parse_failed(&format!("{}", e), &snippet);
             ManagerError::Other(format!("解析版本信息失败：{}", e))
-        })
+        })?;
+
+        self.ui.download_version_info_success()?;
+        report_event("Download.VersionInfo.Success", Some(&vi.manager));
+
+        Ok(vi)
     }
 
     /// 获取分享码
@@ -163,11 +167,16 @@ impl<'a> Downloader<'a> {
             )));
         }
 
-        self.ui.download_share_code_success()?;
-
         let final_url = response.url().as_str();
-        Self::parse_share_code_from_url(final_url)
-            .ok_or_else(|| ManagerError::NetworkError("无法从下载链接中解析分享码".to_string()))
+        if let Some(code) = Self::parse_share_code_from_url(final_url) {
+            self.ui.download_share_code_success()?;
+            report_event("Download.ShareCode.Success", Some(&code));
+            Ok(code)
+        } else {
+            Err(ManagerError::NetworkError(
+                "无法从下载链接中解析分享码".to_string(),
+            ))
+        }
     }
 
     fn download_file_with_progress(
@@ -339,6 +348,7 @@ impl<'a> Downloader<'a> {
                         if name.starts_with("MetaMystia-v") && name.ends_with(".dll") =>
                     {
                         self.ui.download_found_github_asset(name)?;
+                        report_event("Download.GitHub.Dll.Found", Some(name));
                         return Ok(url.to_string());
                     }
                     _ => {}
@@ -347,6 +357,8 @@ impl<'a> Downloader<'a> {
         }
 
         self.ui.download_github_dll_not_found()?;
+        report_event("Download.GitHub.Dll.NotFound", None);
+
         Err(ManagerError::NetworkError(
             "未找到 MetaMystia DLL 文件".to_string(),
         ))
@@ -359,6 +371,8 @@ impl<'a> Downloader<'a> {
         version_info: &VersionInfo,
         dest: &Path,
     ) -> Result<()> {
+        report_event("Download.Metamystia.Start", Some(&version_info.dll));
+
         match self.get_dll_download_url_from_github() {
             Ok(url) => {
                 if let Err(e) = self.download_file_with_progress(&url, dest, None, false) {
@@ -367,10 +381,32 @@ impl<'a> Downloader<'a> {
                         e
                     ))?;
                     self.ui.download_try_fallback_metamystia()?;
+                    report_event("Download.Metamystia.Failed.GitHub", Some(&format!("{}", e)));
+
                     let filename = version_info.metamystia_filename();
                     let fallback_url = Self::file_api_url(share_code, &filename);
-                    self.download_file_with_progress(&fallback_url, dest, None, true)
+
+                    match self.download_file_with_progress(&fallback_url, dest, None, true) {
+                        Ok(()) => {
+                            report_event(
+                                "Download.Metamystia.Success.Fallback",
+                                Some(&version_info.dll),
+                            );
+                            Ok(())
+                        }
+                        Err(e) => {
+                            report_event(
+                                "Download.Metamystia.Failed.Fallback",
+                                Some(&format!("{}", e)),
+                            );
+                            Err(e)
+                        }
+                    }
                 } else {
+                    report_event(
+                        "Download.Metamystia.Success.GitHub",
+                        Some(&version_info.dll),
+                    );
                     Ok(())
                 }
             }
@@ -379,9 +415,27 @@ impl<'a> Downloader<'a> {
                     "从 GitHub 获取 MetaMystia DLL 下载链接失败，切换到备用源...",
                 )?;
                 self.ui.download_try_fallback_metamystia()?;
+                report_event("Download.Metamystia.GitHubUrlFailed", None);
+
                 let filename = version_info.metamystia_filename();
                 let url = Self::file_api_url(share_code, &filename);
-                self.download_file_with_progress(&url, dest, None, true)
+
+                match self.download_file_with_progress(&url, dest, None, true) {
+                    Ok(()) => {
+                        report_event(
+                            "Download.Metamystia.Success.Fallback",
+                            Some(&version_info.dll),
+                        );
+                        Ok(())
+                    }
+                    Err(e) => {
+                        report_event(
+                            "Download.Metamystia.Failed.Fallback",
+                            Some(&format!("{}", e)),
+                        );
+                        Err(e)
+                    }
+                }
             }
         }
     }
@@ -394,15 +448,28 @@ impl<'a> Downloader<'a> {
         dest: &Path,
     ) -> Result<()> {
         self.ui.download_resourceex_start()?;
+        report_event("Download.ResourceEx.Start", Some(&version_info.zip));
+
         let filename = version_info.resourceex_filename();
         let url = Self::file_api_url(share_code, &filename);
-        self.download_file_with_progress(&url, dest, None, true)
+
+        match self.download_file_with_progress(&url, dest, None, true) {
+            Ok(()) => {
+                report_event("Download.ResourceEx.Success", Some(&version_info.zip));
+                Ok(())
+            }
+            Err(e) => {
+                report_event("Download.ResourceEx.Failed", Some(&format!("{}", e)));
+                Err(e)
+            }
+        }
     }
 
     /// 下载 BepInEx
     pub fn download_bepinex(&self, version_info: &VersionInfo, dest: &Path) -> Result<bool> {
         let filename = version_info.bepinex_filename()?;
         let version = version_info.bepinex_version()?;
+        report_event("Download.BepInEx.Start", Some(version));
         let filename_with_version = percent_encode(
             format!("{}#{}", version, filename).as_bytes(),
             NON_ALPHANUMERIC,
@@ -427,22 +494,48 @@ impl<'a> Downloader<'a> {
                         "从 bepinex.dev 下载失败 ({}), 切换到备用源...",
                         e
                     ))?;
+                    report_event("Download.BepInEx.Failed.Primary", Some(version));
+
                     let share_code = self.get_share_code()?;
                     let fallback_url = Self::file_api_url(&share_code, &filename_with_version);
-                    self.download_file_with_progress(&fallback_url, dest, None, true)?;
-                    return Ok(false);
-                }
 
-                Ok(true)
+                    match self.download_file_with_progress(&fallback_url, dest, None, true) {
+                        Ok(()) => {
+                            report_event("Download.BepInEx.Success.Fallback", Some(version));
+                            Ok(false)
+                        }
+                        Err(e) => {
+                            report_event(
+                                "Download.BepInEx.Failed.Fallback",
+                                Some(&format!("{}", e)),
+                            );
+                            Err(e)
+                        }
+                    }
+                } else {
+                    report_event("Download.BepInEx.Success.Primary", Some(version));
+                    Ok(true)
+                }
             }
             Err(_) => {
                 self.ui.download_bepinex_primary_failed(
                     "从 bepinex.dev 下载失败或超时，切换到备用源...",
                 )?;
+                report_event("Download.BepInEx.PrimaryRequestFailed", Some(version));
+
                 let share_code = self.get_share_code()?;
                 let fallback_url = Self::file_api_url(&share_code, &filename_with_version);
-                self.download_file_with_progress(&fallback_url, dest, None, true)?;
-                Ok(false)
+
+                match self.download_file_with_progress(&fallback_url, dest, None, true) {
+                    Ok(()) => {
+                        report_event("Download.BepInEx.Success.Fallback", Some(version));
+                        Ok(false)
+                    }
+                    Err(e) => {
+                        report_event("Download.BepInEx.Failed.Fallback", Some(&format!("{}", e)));
+                        Err(e)
+                    }
+                }
             }
         }
     }
@@ -450,9 +543,21 @@ impl<'a> Downloader<'a> {
     /// 下载管理工具可执行文件
     pub fn download_manager(&self, version_info: &VersionInfo, dest: &Path) -> Result<()> {
         let filename = version_info.manager_filename();
+
+        report_event("Download.Manager.Start", Some(&version_info.manager));
+
         let share_code = self.get_share_code()?;
         let url = Self::file_api_url(&share_code, &filename);
 
-        self.download_file_with_progress(&url, dest, None, true)
+        match self.download_file_with_progress(&url, dest, None, true) {
+            Ok(()) => {
+                report_event("Download.Manager.Success", Some(&version_info.manager));
+                Ok(())
+            }
+            Err(e) => {
+                report_event("Download.Manager.Failed", Some(&format!("{}", e)));
+                Err(e)
+            }
+        }
     }
 }

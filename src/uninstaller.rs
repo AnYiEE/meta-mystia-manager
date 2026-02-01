@@ -3,6 +3,7 @@ use crate::error::{ManagerError, Result};
 use crate::file_ops::{
     DeletionStatus, count_results, execute_deletion, extract_failed_files, scan_existing_files,
 };
+use crate::metrics::report_event;
 use crate::permission::{elevate_and_restart, is_elevated};
 use crate::ui::Ui;
 
@@ -26,11 +27,14 @@ impl<'a> Uninstaller<'a> {
     pub fn uninstall(&self) -> Result<()> {
         // 1. 选择卸载模式
         let mode = self.ui.uninstall_select_mode()?;
+        let mode_desc = mode.description().to_string();
+        report_event("Uninstall.ModeSelected", Some(&mode_desc));
 
         // 2. 扫描实际存在的文件（相对于游戏目录）
         let existing_files = scan_existing_files(&self.game_root, mode);
 
         if existing_files.is_empty() {
+            report_event("Uninstall.NoFiles", None);
             self.ui.uninstall_no_files_found()?;
             return Ok(());
         }
@@ -42,6 +46,7 @@ impl<'a> Uninstaller<'a> {
         if !self.ui.uninstall_confirm_deletion()? {
             return Err(ManagerError::UserCancelled);
         }
+        report_event("Uninstall.Confirmed", Some(&mode_desc));
 
         // 5. 检查当前权限状态
         let is_elevated = is_elevated()?;
@@ -166,6 +171,13 @@ impl<'a> Uninstaller<'a> {
         // 8. 显示操作摘要
         let (success, failed, skipped) = count_results(&all_results);
         self.ui.deletion_display_summary(success, failed, skipped);
+        report_event(
+            "Uninstall.Finished",
+            Some(&format!(
+                "success:{};failed:{};skipped:{}",
+                success, failed, skipped
+            )),
+        );
 
         Ok(())
     }

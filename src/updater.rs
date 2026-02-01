@@ -1,5 +1,6 @@
 use crate::downloader::Downloader;
 use crate::error::{ManagerError, Result};
+use crate::metrics::report_event;
 use crate::model::VersionInfo;
 use crate::temp_dir::create_temp_dir_with_guard;
 use crate::ui::Ui;
@@ -17,11 +18,16 @@ pub fn perform_self_update(
     version_info: &VersionInfo,
 ) -> Result<()> {
     // 1. 准备临时目录并下载
+    report_event("SelfUpdate.Start", Some(&version_info.manager));
     let (temp_dir, _guard) = create_temp_dir_with_guard(game_root)?;
     let filename = version_info.manager_filename();
     let temp_path = temp_dir.join(&filename);
 
     if let Err(e) = downloader.download_manager(version_info, &temp_path) {
+        report_event(
+            "SelfUpdate.Failed",
+            Some(&format!("download failed: {}", e)),
+        );
         ui.manager_update_failed(&format!("下载失败：{}", e))?;
         return Err(e);
     }
@@ -36,6 +42,7 @@ pub fn perform_self_update(
     match std::fs::copy(&temp_path, &target_path) {
         Ok(_) => {}
         Err(e) => {
+            report_event("SelfUpdate.Failed", Some(&format!("copy failed: {}", e)));
             ui.manager_prompt_manual_update()?;
             return Err(ManagerError::from(std::io::Error::new(
                 e.kind(),
@@ -55,6 +62,10 @@ pub fn perform_self_update(
     );
 
     std::fs::write(&script_path, script.as_bytes()).map_err(|e| {
+        report_event(
+            "SelfUpdate.Failed",
+            Some(&format!("write script failed: {}", e)),
+        );
         ManagerError::from(std::io::Error::new(
             e.kind(),
             format!("写入升级脚本失败：{}", e),
@@ -62,6 +73,7 @@ pub fn perform_self_update(
     })?;
 
     if !script_path.exists() {
+        report_event("SelfUpdate.Failed", Some("script missing"));
         ui.manager_update_failed("升级脚本不存在")?;
         return Err(ManagerError::from(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -83,6 +95,7 @@ pub fn perform_self_update(
             .spawn();
 
         if res.is_ok() {
+            report_event("SelfUpdate.Scheduled", Some(&version_info.manager));
             ui.manager_update_starting()?;
             return Ok(());
         }
