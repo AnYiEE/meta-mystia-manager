@@ -143,7 +143,7 @@ impl<'a> Installer<'a> {
         self.ui.install_display_step(2, "获取下载链接");
         let share_code = self.downloader.get_share_code()?;
 
-        // 2.5. 询问是否安装 ResourceEx
+        // 2.1. 询问是否安装 ResourceEx
         let install_resourceex = if cleanup_before_deploy {
             let resourceex_pattern = self
                 .game_root
@@ -158,6 +158,9 @@ impl<'a> Installer<'a> {
         } else {
             self.ui.install_ask_install_resourceex()?
         };
+
+        // 2.2. 询问是否在游戏启动时弹出 BepInEx 控制台窗口
+        let show_bepinex_console = self.ui.install_ask_show_bepinex_console()?;
 
         // 3. 创建临时下载目录
         let (temp_dir, _temp_guard) = create_temp_dir_with_guard(&self.game_root).map_err(|e| {
@@ -241,25 +244,30 @@ Enabled = false
 UnityBaseLibrariesSource = https://url.izakaya.cc/unity-library
 "#;
 
-        let content = if bepinex_from_primary {
-            bepinex_cfg_logging.to_string()
-        } else {
-            format!("{}\n{}", bepinex_cfg_logging, bepinex_cfg_il2cpp)
-        };
+        let mut bepinex_cfg_parts: Vec<String> = Vec::new();
+        if !show_bepinex_console {
+            bepinex_cfg_parts.push(bepinex_cfg_logging.to_string());
+        }
+        if !bepinex_from_primary {
+            bepinex_cfg_parts.push(bepinex_cfg_il2cpp.to_string());
+        }
 
-        let bepinex_tmp_cfg = bepinex_cfg_path.with_extension("cfg.tmp");
-        std::fs::write(&bepinex_tmp_cfg, content.as_bytes()).map_err(|e| {
-            ManagerError::from(std::io::Error::new(
-                e.kind(),
-                format!("写入 BepInEx 临时配置文件失败：{}", e),
-            ))
-        })?;
-        atomic_rename_or_copy(&bepinex_tmp_cfg, &bepinex_cfg_path).map_err(|e| {
-            ManagerError::from(std::io::Error::other(format!(
-                "写入 BepInEx 配置文件失败：{}",
-                e
-            )))
-        })?;
+        let bepinex_cfg = bepinex_cfg_parts.join("\n");
+        if !bepinex_cfg.is_empty() {
+            let bepinex_tmp_cfg = bepinex_cfg_path.with_extension("cfg.tmp");
+            std::fs::write(&bepinex_tmp_cfg, bepinex_cfg.as_bytes()).map_err(|e| {
+                ManagerError::from(std::io::Error::new(
+                    e.kind(),
+                    format!("写入 BepInEx 临时配置文件失败：{}", e),
+                ))
+            })?;
+            atomic_rename_or_copy(&bepinex_tmp_cfg, &bepinex_cfg_path).map_err(|e| {
+                ManagerError::from(std::io::Error::other(format!(
+                    "写入 BepInEx 配置文件失败：{}",
+                    e
+                )))
+            })?;
+        }
 
         // 安装 MetaMystia DLL
         Extractor::deploy_metamystia(&dll_path, &self.game_root)?;
@@ -269,7 +277,7 @@ UnityBaseLibrariesSource = https://url.izakaya.cc/unity-library
             Extractor::deploy_resourceex(path, &self.game_root)?;
         }
 
-        self.ui.install_finished()?;
+        self.ui.install_finished(show_bepinex_console)?;
 
         Ok(())
     }

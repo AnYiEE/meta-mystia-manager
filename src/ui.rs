@@ -41,10 +41,11 @@ pub trait Ui: Send + Sync {
     fn install_display_version_info(&self, version_info: &VersionInfo);
     fn install_confirm_overwrite(&self) -> Result<bool>;
     fn install_ask_install_resourceex(&self) -> Result<bool>;
+    fn install_ask_show_bepinex_console(&self) -> Result<bool>;
     fn install_downloads_completed(&self) -> Result<()>;
     fn install_start_cleanup(&self) -> Result<()>;
     fn install_cleanup_result(&self, success_count: usize, failed_count: usize) -> Result<()>;
-    fn install_finished(&self) -> Result<()>;
+    fn install_finished(&self, show_bepinex_console: bool) -> Result<()>;
 
     // 升级相关
     fn upgrade_warn_unparse_version(&self, filename: &str) -> Result<()>;
@@ -220,6 +221,10 @@ impl Ui for ConsoleUI {
         install_ask_install_resourceex()
     }
 
+    fn install_ask_show_bepinex_console(&self) -> Result<bool> {
+        install_ask_show_bepinex_console()
+    }
+
     fn install_downloads_completed(&self) -> Result<()> {
         install_downloads_completed()
     }
@@ -232,8 +237,8 @@ impl Ui for ConsoleUI {
         install_cleanup_result(success_count, failed_count)
     }
 
-    fn install_finished(&self) -> Result<()> {
-        install_finished()
+    fn install_finished(&self, show_bepinex_console: bool) -> Result<()> {
+        install_finished(show_bepinex_console)
     }
 
     fn upgrade_warn_unparse_version(&self, filename: &str) -> Result<()> {
@@ -755,6 +760,20 @@ fn install_ask_install_resourceex() -> Result<bool> {
     }
 }
 
+fn install_ask_show_bepinex_console() -> Result<bool> {
+    println!();
+
+    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(" 是否在游戏启动时弹出 BepInEx 的控制台窗口用于显示日志？")
+        .default(false)
+        .interact_on_opt(&Term::stdout())?;
+
+    match confirmed {
+        Some(true) => Ok(true),
+        _ => Ok(false),
+    }
+}
+
 fn install_downloads_completed() -> Result<()> {
     println!("所有文件下载完成");
     Ok(())
@@ -776,14 +795,25 @@ fn install_cleanup_result(success: usize, failed: usize) -> Result<()> {
     Ok(())
 }
 
-fn install_finished() -> Result<()> {
+fn install_finished(show_bepinex_console: bool) -> Result<()> {
     println!("安装完成！");
     println!("现在可以启动游戏，Mod 将自动加载。");
-    println!(
-        "{}",
-        style("注意：首次启动需要较长时间加载（可能需要几分钟且没有任何窗口弹出），请您耐心等待。")
+
+    if show_bepinex_console {
+        println!(
+            "{}",
+            style("注意：首次启动需要较长时间加载，请您耐心等待。").yellow()
+        );
+    } else {
+        println!(
+            "{}",
+            style(
+                "注意：首次启动需要较长时间加载（可能需要几分钟且没有任何窗口弹出），请您耐心等待。"
+            )
             .yellow()
-    );
+        );
+    }
+
     println!("祝您游戏愉快！");
     Ok(())
 }
