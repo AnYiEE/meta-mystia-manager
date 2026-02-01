@@ -104,6 +104,10 @@ fn send_tracking_request(url: String) {
 }
 
 pub fn report_event(action: &str, name: Option<&str>) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+
     let user_id = get_user_id();
 
     let mut params: HashMap<&str, String> = HashMap::new();
