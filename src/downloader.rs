@@ -43,10 +43,7 @@ impl<'a> Downloader<'a> {
     fn build_client(connect_timeout: Duration) -> Result<Client> {
         ClientBuilder::new()
             .connect_timeout(connect_timeout)
-            .user_agent(format!(
-                "meta-mystia-manager/{} (+https://github.com/AnYiEE/meta-mystia-manager)",
-                env!("CARGO_PKG_VERSION")
-            ))
+            .user_agent(crate::config::USER_AGENT)
             .build()
             .map_err(|e| ManagerError::NetworkError(format!("创建 HTTP 客户端失败：{}", e)))
     }

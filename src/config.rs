@@ -41,6 +41,12 @@ pub const GAME_EXECUTABLE: &str = "Touhou Mystia Izakaya.exe";
 pub const GAME_PROCESS_NAME: &str = "Touhou Mystia Izakaya.exe";
 pub const GAME_STEAM_APP_ID: u32 = 1_584_090;
 
+pub const USER_AGENT: &str = concat!(
+    "meta-mystia-manager/",
+    env!("CARGO_PKG_VERSION"),
+    " (+https://github.com/AnYiEE/meta-mystia-manager)"
+);
+
 pub struct NetworkRetryConfig {
     /// 最大重试次数（至少 1）
     pub attempts: usize,

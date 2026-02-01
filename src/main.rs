@@ -5,6 +5,7 @@ mod error;
 mod extractor;
 mod file_ops;
 mod installer;
+mod metrics;
 mod model;
 mod net;
 mod permission;
