@@ -30,7 +30,9 @@ pub trait Ui: Send + Sync {
 
     // 通用输出
     fn message(&self, text: &str) -> Result<()>;
+    #[allow(dead_code)]
     fn warn(&self, text: &str) -> Result<()>;
+    #[allow(dead_code)]
     fn error(&self, text: &str) -> Result<()>;
 
     // 目录相关
@@ -40,6 +42,12 @@ pub trait Ui: Send + Sync {
     // 安装相关
     fn install_display_step(&self, step: usize, description: &str);
     fn install_display_version_info(&self, version_info: &VersionInfo);
+    fn install_warn_existing(
+        &self,
+        bepinex_installed: bool,
+        metamystia_installed: bool,
+        resourceex_installed: bool,
+    ) -> Result<()>;
     fn install_confirm_overwrite(&self) -> Result<bool>;
     fn install_ask_install_resourceex(&self) -> Result<bool>;
     fn install_ask_show_bepinex_console(&self) -> Result<bool>;
@@ -212,6 +220,19 @@ impl Ui for ConsoleUI {
 
     fn install_display_version_info(&self, version_info: &VersionInfo) {
         install_display_version_info(version_info)
+    }
+
+    fn install_warn_existing(
+        &self,
+        bepinex_installed: bool,
+        metamystia_installed: bool,
+        resourceex_installed: bool,
+    ) -> Result<()> {
+        install_warn_existing(
+            bepinex_installed,
+            metamystia_installed,
+            resourceex_installed,
+        )
     }
 
     fn install_confirm_overwrite(&self) -> Result<bool> {
@@ -555,6 +576,7 @@ fn display_welcome() -> Result<()> {
 
     println!("{}", style("═".repeat(60)).cyan());
     println!();
+
     Ok(())
 }
 
@@ -694,6 +716,7 @@ fn path_display_steam_found(app_id: u32, name: Option<&str>, path: &Path) -> Res
     );
     println!("路径：{}", path.display());
     println!();
+
     Ok(())
 }
 
@@ -738,6 +761,35 @@ fn install_display_version_info(version_info: &VersionInfo) {
     if let Ok(bep_ver) = version_info.bepinex_version() {
         println!("  • BepInEx：{}", style(bep_ver).green());
     }
+}
+
+fn install_warn_existing(
+    bepinex_installed: bool,
+    metamystia_installed: bool,
+    resourceex_installed: bool,
+) -> Result<()> {
+    println!();
+    println!("{}", style("警告：检测到已安装的组件").yellow());
+    println!();
+
+    if bepinex_installed {
+        println!("  • BepInEx 框架");
+    }
+    if metamystia_installed {
+        println!("  • MetaMystia DLL");
+    }
+    if resourceex_installed {
+        println!("  • ResourceExample ZIP");
+    }
+
+    println!();
+    println!("继续安装将会执行以下操作：");
+    println!("  • 覆盖 BepInEx 框架相关文件（不包含 plugins 文件夹）");
+    println!("  • 覆盖 MetaMystia 相关文件");
+    println!("  • 安装最新版本的 BepInEx 和 MetaMystia 相关文件");
+    println!();
+
+    Ok(())
 }
 
 fn install_confirm_overwrite() -> Result<bool> {
@@ -845,6 +897,7 @@ fn install_finished(show_bepinex_console: bool) -> Result<()> {
     }
 
     println!("祝您游戏愉快！");
+
     Ok(())
 }
 

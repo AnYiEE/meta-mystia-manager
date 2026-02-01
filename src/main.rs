@@ -127,26 +127,11 @@ fn run_install(game_root: PathBuf, ui: &dyn Ui) -> Result<()> {
     let has_installed = bepinex_installed || metamystia_installed || resourceex_installed;
 
     if has_installed {
-        ui.message("")?;
-        ui.warn("警告：检测到已安装的组件")?;
-        ui.message("")?;
-
-        if bepinex_installed {
-            ui.message("  • BepInEx 框架")?;
-        }
-        if metamystia_installed {
-            ui.message("  • MetaMystia DLL")?;
-        }
-        if resourceex_installed {
-            ui.message("  • ResourceExample ZIP")?;
-        }
-
-        ui.message("")?;
-        ui.message("继续安装将会执行以下操作：")?;
-        ui.message("  • 覆盖 BepInEx 框架相关文件（不包含 plugins 文件夹）")?;
-        ui.message("  • 覆盖 MetaMystia 相关文件")?;
-        ui.message("  • 安装最新版本的 BepInEx 和 MetaMystia 相关文件")?;
-        ui.message("")?;
+        ui.install_warn_existing(
+            bepinex_installed,
+            metamystia_installed,
+            resourceex_installed,
+        )?;
 
         let confirmed = ui.install_confirm_overwrite()?;
         if !confirmed {
