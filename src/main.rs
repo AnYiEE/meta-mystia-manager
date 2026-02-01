@@ -106,9 +106,16 @@ fn run(ui: &dyn Ui) -> Result<()> {
         return Err(ManagerError::GameRunning);
     }
 
-    // 4. 选择操作模式
-    let operation = ui.select_operation_mode()?;
+    // 4. 显示可升级项
+    if let Some(vi) = version_info.as_ref()
+        && let Ok(upgrader) = Upgrader::new(game_root.clone(), ui)
+        && let Ok((dll_needs, res_needs)) = upgrader.has_updates(vi)
+    {
+        ui.display_available_updates(dll_needs, res_needs)?;
+    }
 
+    // 5. 选择操作模式
+    let operation = ui.select_operation_mode()?;
     match operation {
         Install => run_install(game_root.clone(), ui),
         Upgrade => run_upgrade(game_root.clone(), ui),

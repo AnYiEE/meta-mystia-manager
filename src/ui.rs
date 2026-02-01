@@ -23,6 +23,11 @@ pub trait Ui: Send + Sync {
     fn display_welcome(&self) -> Result<()>;
     fn display_version(&self, manager_version: Option<&str>) -> Result<()>;
     fn display_game_running_warning(&self) -> Result<()>;
+    fn display_available_updates(
+        &self,
+        dll_available: bool,
+        resourceex_available: bool,
+    ) -> Result<()>;
     fn select_operation_mode(&self) -> Result<OperationMode>;
 
     fn blank_line(&self) -> Result<()>;
@@ -176,6 +181,14 @@ impl Ui for ConsoleUI {
 
     fn display_game_running_warning(&self) -> Result<()> {
         display_game_running_warning()
+    }
+
+    fn display_available_updates(
+        &self,
+        dll_available: bool,
+        resourceex_available: bool,
+    ) -> Result<()> {
+        display_available_updates(dll_available, resourceex_available)
     }
 
     fn select_operation_mode(&self) -> Result<OperationMode> {
@@ -602,59 +615,23 @@ fn display_version(manager_version: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-// ==================== 自升级相关 UI ====================
-
-fn manager_ask_self_update(current_version: &str, latest_version: &str) -> Result<bool> {
-    println!(
-        "管理工具可以升级：{} -> {}",
-        style(current_version).green(),
-        style(latest_version).green()
-    );
-    println!();
-
-    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
-        .with_prompt(" 是否立即升级？")
-        .default(false)
-        .interact_on_opt(&Term::stdout())?;
-
-    match confirmed {
-        Some(true) => {
-            report_event("UI.SelfUpdate.Choice", Some("yes"));
-            println!();
-            Ok(true)
-        }
-        _ => {
-            report_event("UI.SelfUpdate.Choice", Some("no"));
-            println!();
-            Ok(false)
-        }
-    }
-}
-
-fn manager_update_starting() -> Result<()> {
-    println!();
-    println!("正在启动升级脚本，请稍候...");
-    println!();
-    Ok(())
-}
-
-fn manager_update_failed(err: &str) -> Result<()> {
-    println!();
-    println!("{}", style(format!("升级失败：{}", err)).red());
-    println!("请手动下载并升级管理工具。");
-    println!();
-    Ok(())
-}
-
-fn manager_prompt_manual_update() -> Result<()> {
-    println!();
-    println!("无法向当前运行目录写入文件，请手动下载并升级管理工具。");
-    println!();
-    Ok(())
-}
-
 fn display_game_running_warning() -> Result<()> {
     println!("请先关闭游戏，然后重新运行本程序。");
+    Ok(())
+}
+
+fn display_available_updates(dll_available: bool, resourceex_available: bool) -> Result<()> {
+    if dll_available || resourceex_available {
+        println!("检测到可升级项：");
+        if dll_available {
+            println!("  • MetaMystia DLL 可升级");
+        }
+        if resourceex_available {
+            println!("  • ResourceExample ZIP 可升级");
+        }
+        println!();
+    }
+
     Ok(())
 }
 
@@ -1327,5 +1304,56 @@ fn network_rate_limited(secs: u64) -> Result<()> {
         ))
         .yellow()
     );
+    Ok(())
+}
+
+// ==================== 自升级相关 UI ====================
+
+fn manager_ask_self_update(current_version: &str, latest_version: &str) -> Result<bool> {
+    println!(
+        "管理工具可以升级：{} -> {}",
+        style(current_version).green(),
+        style(latest_version).green()
+    );
+    println!();
+
+    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(" 是否立即升级？")
+        .default(false)
+        .interact_on_opt(&Term::stdout())?;
+
+    match confirmed {
+        Some(true) => {
+            report_event("UI.SelfUpdate.Choice", Some("yes"));
+            println!();
+            Ok(true)
+        }
+        _ => {
+            report_event("UI.SelfUpdate.Choice", Some("no"));
+            println!();
+            Ok(false)
+        }
+    }
+}
+
+fn manager_update_starting() -> Result<()> {
+    println!();
+    println!("正在启动升级脚本，请稍候...");
+    println!();
+    Ok(())
+}
+
+fn manager_update_failed(err: &str) -> Result<()> {
+    println!();
+    println!("{}", style(format!("升级失败：{}", err)).red());
+    println!("请手动下载并升级管理工具。");
+    println!();
+    Ok(())
+}
+
+fn manager_prompt_manual_update() -> Result<()> {
+    println!();
+    println!("无法向当前运行目录写入文件，请手动下载并升级管理工具。");
+    println!();
     Ok(())
 }

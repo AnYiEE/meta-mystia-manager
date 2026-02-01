@@ -4,6 +4,7 @@ use crate::file_ops::{
     atomic_rename_or_copy, backup_paths_with_index, glob_matches, remove_glob_files,
 };
 use crate::metrics::report_event;
+use crate::model::VersionInfo;
 use crate::temp_dir::create_temp_dir_with_guard;
 use crate::ui::Ui;
 
@@ -165,25 +166,44 @@ impl<'a> Upgrader<'a> {
         Ok(())
     }
 
+    fn get_installed_versions(&self) -> Result<(Option<String>, Option<String>)> {
+        let dll = self.consolidate_installed_dlls()?.map(|(v, _)| v);
+        let res = self.consolidate_installed_resourceex()?.map(|(v, _)| v);
+
+        Ok((dll, res))
+    }
+
+    /// 检查是否有可用升级
+    pub fn has_updates(&self, version_info: &VersionInfo) -> Result<(bool, bool)> {
+        let (dll_opt, res_opt) = self.get_installed_versions()?;
+
+        let dll_needs = dll_opt
+            .as_ref()
+            .map(|cur| cur != &version_info.dll)
+            .unwrap_or(false);
+        let res_needs = res_opt
+            .as_ref()
+            .map(|cur| cur != &version_info.zip)
+            .unwrap_or(false);
+
+        Ok((dll_needs, res_needs))
+    }
+
     /// 执行升级
     pub fn upgrade(&self) -> Result<()> {
         // 1. 查找当前安装的版本
         self.ui.upgrade_checking_installed_version()?;
 
-        let (current_dll_version, _current_dll_path) = match self.consolidate_installed_dlls()? {
-            Some((version, path)) => (version, path),
+        let (dll_opt, res_opt) = self.get_installed_versions()?;
+        let current_dll_version = match dll_opt {
+            Some(v) => v,
             None => {
                 return Err(ManagerError::Other(
                     "未找到已安装的 MetaMystia Mod，请先使用安装功能。".to_string(),
                 ));
             }
         };
-
-        let (current_resourceex_version, _current_resourceex_path) =
-            match self.consolidate_installed_resourceex()? {
-                Some((version, path)) => (version, path),
-                None => ("".to_string(), PathBuf::new()),
-            };
+        let current_resourceex_version = res_opt.unwrap_or_default();
 
         report_event(
             "Upgrade.Detected",
