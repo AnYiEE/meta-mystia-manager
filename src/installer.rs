@@ -2,7 +2,7 @@ use crate::config::UninstallMode;
 use crate::downloader::Downloader;
 use crate::error::{ManagerError, Result};
 use crate::extractor::Extractor;
-use crate::file_ops::{count_results, execute_deletion, glob_matches};
+use crate::file_ops::{atomic_rename_or_copy, count_results, execute_deletion, glob_matches};
 use crate::temp_dir::create_temp_dir_with_guard;
 use crate::ui::Ui;
 
@@ -172,7 +172,8 @@ impl<'a> Installer<'a> {
 
         // 下载 BepInEx
         let bepinex_path = temp_dir.join(version_info.bepinex_filename()?);
-        self.downloader
+        let bepinex_from_primary = self
+            .downloader
             .download_bepinex(&version_info, &bepinex_path)?;
 
         // 下载 MetaMystia DLL
@@ -208,6 +209,57 @@ impl<'a> Installer<'a> {
 
         // 安装 BepInEx（如果之前存在则保留 plugins 目录）
         Extractor::deploy_bepinex(&bepinex_path, &self.game_root, bepinex_exists)?;
+
+        // 写入默认配置（如果不存在）
+        let bepinex_config_dir = self.game_root.join("BepInEx").join("config");
+        if !bepinex_config_dir.exists() {
+            std::fs::create_dir_all(&bepinex_config_dir).map_err(|e| {
+                ManagerError::from(std::io::Error::new(
+                    e.kind(),
+                    format!("创建 BepInEx 配置目录失败：{}", e),
+                ))
+            })?;
+        }
+
+        let bepinex_cfg_path = bepinex_config_dir.join("BepInEx.cfg");
+        let bepinex_cfg_logging = r#"[Logging.Console]
+
+## Enables showing a console for log output.
+# Setting type: Boolean
+# Default value: true
+Enabled = false
+"#;
+        let bepinex_cfg_il2cpp = r#"[IL2CPP]
+
+## URL to a ZIP file with managed Unity base libraries. They are used by Il2CppInterop to generate interop assemblies.
+## The URL can include {VERSION} template which will be replaced with the game's Unity engine version.
+## If a .zip file with the same filename as the URL (after template replacement) already exists in unity-libs, it will be used instead of downloading a new copy.
+## If you want to ensure BepInEx doesn't try to connect to the internet, set this to only the .zip filename (without a URL) and manually place the file in the unity-libs directory.
+##
+# Setting type: String
+# Default value: https://unity.bepinex.dev/libraries/{VERSION}.zip
+UnityBaseLibrariesSource = https://url.izakaya.cc/unity-library
+"#;
+
+        let content = if bepinex_from_primary {
+            bepinex_cfg_logging.to_string()
+        } else {
+            format!("{}\n{}", bepinex_cfg_logging, bepinex_cfg_il2cpp)
+        };
+
+        let bepinex_tmp_cfg = bepinex_cfg_path.with_extension("cfg.tmp");
+        std::fs::write(&bepinex_tmp_cfg, content.as_bytes()).map_err(|e| {
+            ManagerError::from(std::io::Error::new(
+                e.kind(),
+                format!("写入 BepInEx 临时配置文件失败：{}", e),
+            ))
+        })?;
+        atomic_rename_or_copy(&bepinex_tmp_cfg, &bepinex_cfg_path).map_err(|e| {
+            ManagerError::from(std::io::Error::other(format!(
+                "写入 BepInEx 配置文件失败：{}",
+                e
+            )))
+        })?;
 
         // 安装 MetaMystia DLL
         Extractor::deploy_metamystia(&dll_path, &self.game_root)?;

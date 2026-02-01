@@ -779,6 +779,12 @@ fn install_cleanup_result(success: usize, failed: usize) -> Result<()> {
 fn install_finished() -> Result<()> {
     println!("安装完成！");
     println!("现在可以启动游戏，Mod 将自动加载。");
+    println!(
+        "{}",
+        style("注意：首次启动需要较长时间加载（可能需要几分钟且没有任何窗口弹出），请您耐心等待。")
+            .yellow()
+    );
+    println!("祝您游戏愉快！");
     Ok(())
 }
 

@@ -403,7 +403,7 @@ impl<'a> Downloader<'a> {
     }
 
     /// 下载 BepInEx
-    pub fn download_bepinex(&self, version_info: &VersionInfo, dest: &Path) -> Result<()> {
+    pub fn download_bepinex(&self, version_info: &VersionInfo, dest: &Path) -> Result<bool> {
         let filename = version_info.bepinex_filename()?;
         let version = version_info.bepinex_version()?;
         let filename_with_version = percent_encode(
@@ -432,10 +432,11 @@ impl<'a> Downloader<'a> {
                     ))?;
                     let share_code = self.get_share_code()?;
                     let fallback_url = Self::file_api_url(&share_code, &filename_with_version);
-                    return self.download_file_with_progress(&fallback_url, dest, None, true);
+                    self.download_file_with_progress(&fallback_url, dest, None, true)?;
+                    return Ok(false);
                 }
 
-                Ok(())
+                Ok(true)
             }
             Err(_) => {
                 self.ui.download_bepinex_primary_failed(
@@ -443,7 +444,8 @@ impl<'a> Downloader<'a> {
                 )?;
                 let share_code = self.get_share_code()?;
                 let fallback_url = Self::file_api_url(&share_code, &filename_with_version);
-                self.download_file_with_progress(&fallback_url, dest, None, true)
+                self.download_file_with_progress(&fallback_url, dest, None, true)?;
+                Ok(false)
             }
         }
     }
