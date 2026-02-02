@@ -78,10 +78,6 @@ pub fn elevate_and_restart() -> Result<()> {
     script_path.push(format!("meta_mystia_elevate_{}.ps1", std::process::id()));
 
     std::fs::write(&script_path, script.as_bytes()).map_err(|e| {
-        report_event(
-            "Permission.Elevate.ScriptWriteFailed",
-            Some(&format!("{}", e)),
-        );
         ManagerError::from(std::io::Error::new(
             e.kind(),
             format!("写入提升脚本失败：{}", e),

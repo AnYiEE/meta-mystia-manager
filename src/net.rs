@@ -45,6 +45,8 @@ where
         }
     }
 
+    report_event("Network.RetryFailed", Some(op_desc));
+
     Err(ManagerError::NetworkError(format!(
         "{}达到最大重试次数",
         op_desc

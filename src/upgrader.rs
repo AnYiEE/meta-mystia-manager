@@ -191,6 +191,8 @@ impl<'a> Upgrader<'a> {
 
     /// 执行升级
     pub fn upgrade(&self) -> Result<()> {
+        report_event("Upgrade.Start", None);
+
         // 1. 查找当前安装的版本
         self.ui.upgrade_checking_installed_version()?;
 
@@ -222,7 +224,7 @@ impl<'a> Upgrader<'a> {
         // 2. 获取最新版本信息
         self.ui.blank_line()?;
         let version_info = self.downloader.get_version_info()?;
-        report_event("Upgrade.VersionInfo", Some(&version_info.manager));
+        report_event("Upgrade.VersionInfo", Some(&version_info.to_string()));
 
         // 检查 MetaMystia DLL 是否需要升级
         let new_dll_version = &version_info.dll;
@@ -352,7 +354,7 @@ impl<'a> Upgrader<'a> {
             })?;
 
             self.ui.upgrade_install_success(&new_dll_path)?;
-            report_event("Upgrade.Dll.Installed", Some(&filename));
+            report_event("Upgrade.Installed.DLL", Some(&filename));
 
             if backup_paths.is_empty() {
                 None
@@ -403,7 +405,7 @@ impl<'a> Upgrader<'a> {
             })?;
 
             self.ui.upgrade_install_success(&new_zip_path)?;
-            report_event("Upgrade.ResourceEx.Installed", Some(&filename));
+            report_event("Upgrade.Installed.ResourceEx", Some(&filename));
         }
 
         // 7. 清理临时文件

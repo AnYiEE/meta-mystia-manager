@@ -17,18 +17,16 @@ pub fn perform_self_update(
     downloader: &Downloader,
     version_info: &VersionInfo,
 ) -> Result<()> {
-    // 1. 准备临时目录并下载
     report_event("SelfUpdate.Start", Some(&version_info.manager));
+
+    // 1. 准备临时目录并下载
     let (temp_dir, _guard) = create_temp_dir_with_guard(game_root)?;
     let filename = version_info.manager_filename();
     let temp_path = temp_dir.join(&filename);
 
     if let Err(e) = downloader.download_manager(version_info, &temp_path) {
-        report_event(
-            "SelfUpdate.Failed",
-            Some(&format!("download failed: {}", e)),
-        );
         ui.manager_update_failed(&format!("下载失败：{}", e))?;
+        report_event("SelfUpdate.Failed.Download", Some(&format!("{}", e)));
         return Err(e);
     }
 
@@ -42,8 +40,8 @@ pub fn perform_self_update(
     match std::fs::copy(&temp_path, &target_path) {
         Ok(_) => {}
         Err(e) => {
-            report_event("SelfUpdate.Failed", Some(&format!("copy failed: {}", e)));
             ui.manager_prompt_manual_update()?;
+            report_event("SelfUpdate.Failed.Copy", Some(&format!("{}", e)));
             return Err(ManagerError::from(std::io::Error::new(
                 e.kind(),
                 format!("复制到运行目录失败：{}", e),
@@ -56,16 +54,13 @@ pub fn perform_self_update(
     let script_path = std::env::temp_dir().join(&script_name);
 
     let script = generate_powershell_script(
-        exe_path.to_string_lossy().as_ref(),
-        target_path.to_string_lossy().as_ref(),
+        &exe_path.to_string_lossy(),
+        &target_path.to_string_lossy(),
         std::process::id(),
     );
 
     std::fs::write(&script_path, script.as_bytes()).map_err(|e| {
-        report_event(
-            "SelfUpdate.Failed",
-            Some(&format!("write script failed: {}", e)),
-        );
+        report_event("SelfUpdate.Failed.ScriptWrite", Some(&format!("{}", e)));
         ManagerError::from(std::io::Error::new(
             e.kind(),
             format!("写入升级脚本失败：{}", e),
@@ -73,7 +68,10 @@ pub fn perform_self_update(
     })?;
 
     if !script_path.exists() {
-        report_event("SelfUpdate.Failed", Some("script missing"));
+        report_event(
+            "SelfUpdate.Failed.ScriptMissing",
+            Some(&script_path.to_string_lossy()),
+        );
         ui.manager_update_failed("升级脚本不存在")?;
         return Err(ManagerError::from(std::io::Error::new(
             std::io::ErrorKind::NotFound,

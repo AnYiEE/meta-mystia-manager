@@ -25,6 +25,8 @@ impl<'a> Uninstaller<'a> {
 
     /// 执行卸载流程
     pub fn uninstall(&self) -> Result<()> {
+        report_event("Uninstall.Start", None);
+
         // 1. 选择卸载模式
         let mode = self.ui.uninstall_select_mode()?;
         let mode_desc = mode.description().to_string();
@@ -34,8 +36,8 @@ impl<'a> Uninstaller<'a> {
         let existing_files = scan_existing_files(&self.game_root, mode);
 
         if existing_files.is_empty() {
-            report_event("Uninstall.NoFiles", None);
             self.ui.uninstall_no_files_found()?;
+            report_event("Uninstall.NoFiles", None);
             return Ok(());
         }
 
@@ -44,6 +46,7 @@ impl<'a> Uninstaller<'a> {
 
         // 4. 确认删除
         if !self.ui.uninstall_confirm_deletion()? {
+            report_event("Uninstall.Cancelled", Some(&mode_desc));
             return Err(ManagerError::UserCancelled);
         }
         report_event("Uninstall.Confirmed", Some(&mode_desc));
@@ -68,7 +71,7 @@ impl<'a> Uninstaller<'a> {
             for p in &failed_files {
                 if let Some(r) = all_results.iter().find(|r| &r.path == p) {
                     match &r.status {
-                        DeletionStatus::Failed(err) => match &**err {
+                        DeletionStatus::Failed(e) => match &**e {
                             ManagerError::FileInUse(_) => in_use_failures.push(p.clone()),
                             ManagerError::PermissionDenied(_) => perm_failures.push(p.clone()),
                             _ => other_failures.push(p.clone()),
@@ -128,7 +131,7 @@ impl<'a> Uninstaller<'a> {
             }
 
             let has_permission_issue = all_results.iter().any(|r| match &r.status {
-                DeletionStatus::Failed(err) => matches!(&**err, ManagerError::PermissionDenied(_)),
+                DeletionStatus::Failed(e) => matches!(&**e, ManagerError::PermissionDenied(_)),
                 _ => false,
             });
 

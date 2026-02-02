@@ -44,8 +44,8 @@ pub fn check_game_directory(ui: &dyn Ui) -> Result<PathBuf> {
         if candidate.join(GAME_EXECUTABLE).is_file() {
             ui.path_display_steam_found(app.app_id, app.name.as_deref(), &candidate)?;
             if ui.path_confirm_use_steam_found()? {
-                report_event("Env.SteamFound", Some(&candidate.to_string_lossy()));
                 ui.blank_line()?;
+                report_event("Env.SteamFound", Some(&candidate.to_string_lossy()));
                 return Ok(candidate);
             } else {
                 ui.blank_line()?;
@@ -61,6 +61,7 @@ pub fn check_game_directory(ui: &dyn Ui) -> Result<PathBuf> {
     }
 
     report_event("Env.GameNotFound", None);
+
     Err(ManagerError::GameNotFound)
 }
 
@@ -70,6 +71,10 @@ pub fn check_game_running() -> Result<bool> {
         let snapshot_handle = match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
             Ok(handle) => SnapshotHandle::new(handle),
             Err(e) => {
+                report_event(
+                    "Env.GameRunning.CheckFailed.CreateToolhelp32Snapshot",
+                    Some(&format!("err={:?}", e)),
+                );
                 return Err(ManagerError::ProcessListError(format!(
                     "无法获取进程列表：{:?}",
                     e
@@ -83,10 +88,18 @@ pub fn check_game_running() -> Result<bool> {
             ..Default::default()
         };
 
-        if Process32FirstW(snapshot, &mut entry).is_err() {
-            return Err(ManagerError::ProcessListError(
-                "读取进程列表失败".to_string(),
-            ));
+        match Process32FirstW(snapshot, &mut entry) {
+            Ok(()) => {}
+            Err(e) => {
+                report_event(
+                    "Env.GameRunning.CheckFailed.Process32FirstW",
+                    Some(&format!("err={:?}", e)),
+                );
+                return Err(ManagerError::ProcessListError(format!(
+                    "读取进程列表失败：{:?}",
+                    e
+                )));
+            }
         }
 
         let target = GAME_PROCESS_NAME.to_lowercase();

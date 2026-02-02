@@ -46,7 +46,10 @@ impl<'a> Downloader<'a> {
             .connect_timeout(connect_timeout)
             .user_agent(crate::config::USER_AGENT)
             .build()
-            .map_err(|e| ManagerError::NetworkError(format!("创建 HTTP 客户端失败：{}", e)))
+            .map_err(|e| {
+                report_event("Download.ClientBuildFailed", Some(&format!("{}", e)));
+                ManagerError::NetworkError(format!("创建 HTTP 客户端失败：{}", e))
+            })
     }
 
     fn retry<F, T>(&self, op_desc: &str, f: F) -> Result<T>
@@ -124,6 +127,10 @@ impl<'a> Downloader<'a> {
             let _ = self
                 .ui
                 .download_version_info_parse_failed(&format!("{}", e), &snippet);
+            report_event(
+                "Download.VersionInfo.ParseFailed",
+                Some(&format!("err={};snippet={}", e, snippet)),
+            );
             ManagerError::Other(format!("解析版本信息失败：{}", e))
         })?;
 
@@ -173,6 +180,10 @@ impl<'a> Downloader<'a> {
             report_event("Download.ShareCode.Success", Some(&code));
             Ok(code)
         } else {
+            report_event(
+                "Download.ShareCode.ParseFailed",
+                Some(&format!("url={}", final_url)),
+            );
             Err(ManagerError::NetworkError(
                 "无法从下载链接中解析分享码".to_string(),
             ))
@@ -469,7 +480,6 @@ impl<'a> Downloader<'a> {
     pub fn download_bepinex(&self, version_info: &VersionInfo, dest: &Path) -> Result<bool> {
         let filename = version_info.bepinex_filename()?;
         let version = version_info.bepinex_version()?;
-        report_event("Download.BepInEx.Start", Some(version));
         let filename_with_version = percent_encode(
             format!("{}#{}", version, filename).as_bytes(),
             NON_ALPHANUMERIC,
@@ -479,6 +489,7 @@ impl<'a> Downloader<'a> {
         let primary_url = format!("{}/{}/{}", BEPINEX_PRIMARY, version, filename);
 
         self.ui.download_bepinex_attempt_primary()?;
+        report_event("Download.BepInEx.Start", Some(version));
 
         let primary_result =
             get_response_with_retry(&self.client, self.ui, &primary_url, "请求 BepInEx 主源");

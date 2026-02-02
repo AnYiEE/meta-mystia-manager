@@ -777,11 +777,11 @@ fn install_confirm_overwrite() -> Result<bool> {
 
     match confirmed {
         Some(true) => {
-            report_event("UI.InstallConfirm", Some("yes"));
+            report_event("UI.Install.Confirm", Some("yes"));
             Ok(true)
         }
         _ => {
-            report_event("UI.InstallConfirm", Some("no"));
+            report_event("UI.Install.Confirm", Some("no"));
             Ok(false)
         }
     }

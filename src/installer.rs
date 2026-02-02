@@ -135,11 +135,13 @@ impl<'a> Installer<'a> {
 
     /// 执行安装流程
     pub fn install(&self, cleanup_before_deploy: bool) -> Result<()> {
+        report_event("Install.Start", None);
+
         // 1. 获取版本信息
         self.ui.install_display_step(1, "获取版本信息");
         let version_info = self.downloader.get_version_info()?;
         self.ui.install_display_version_info(&version_info);
-        report_event("Install.VersionInfo", Some(&version_info.manager));
+        report_event("Install.VersionInfo", Some(&version_info.to_string()));
 
         // 2. 获取分享码
         self.ui.install_display_step(2, "获取下载链接");
@@ -164,12 +166,6 @@ impl<'a> Installer<'a> {
 
         // 2.2. 询问是否在游戏启动时弹出 BepInEx 控制台窗口
         let show_bepinex_console = self.ui.install_ask_show_bepinex_console()?;
-
-        let opts = format!(
-            "resourceex={};bep_console={}",
-            install_resourceex, show_bepinex_console
-        );
-        report_event("Install.Options", Some(&opts));
 
         // 3. 创建临时下载目录
         let (temp_dir, _temp_guard) = create_temp_dir_with_guard(&self.game_root).map_err(|e| {

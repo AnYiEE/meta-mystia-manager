@@ -73,7 +73,7 @@ fn run(ui: &dyn Ui) -> Result<()> {
     ui.display_version(version_info.as_ref().map(|vi| vi.manager.as_str()))?;
 
     // 自升级提示
-    if let (Some(downloader), Some(vi)) = (downloader.as_ref(), version_info.as_ref()) {
+    if let (Some(downloader), Some(vi)) = (&downloader, &version_info) {
         let current_version = env!("CARGO_PKG_VERSION");
         if current_version != vi.manager
             && ui.manager_ask_self_update(current_version, &vi.manager)?
@@ -107,7 +107,7 @@ fn run(ui: &dyn Ui) -> Result<()> {
     }
 
     // 4. 显示可升级项
-    if let Some(vi) = version_info.as_ref()
+    if let Some(vi) = &version_info
         && let Ok(upgrader) = Upgrader::new(game_root.clone(), ui)
         && let Ok((dll_needs, res_needs)) = upgrader.has_updates(vi)
     {

@@ -38,14 +38,6 @@ impl Extractor {
         let file = match std::fs::File::open(zip_path) {
             Ok(f) => f,
             Err(e) => {
-                report_event(
-                    "Extract.Failed",
-                    Some(&format!(
-                        "open:{zip}:{err}",
-                        zip = zip_path.to_string_lossy(),
-                        err = e
-                    )),
-                );
                 return Err(ManagerError::from(std::io::Error::new(
                     e.kind(),
                     format!("打开 ZIP 失败：{}", e),
@@ -72,6 +64,10 @@ impl Extractor {
 
         for i in 0..archive.len() {
             let mut file = archive.by_index(i).map_err(|e| {
+                report_event(
+                    "Extract.Entry.Failed",
+                    Some(&format!("index:{};err={}", i, e)),
+                );
                 ManagerError::ExtractFailed(format!("读取条目失败（index {}）：{}", i, e))
             })?;
 
@@ -160,10 +156,6 @@ impl Extractor {
                 let mut tmp_file = match std::fs::File::create(&tmp_path) {
                     Ok(f) => f,
                     Err(e) => {
-                        report_event(
-                            "Extract.Entry.Failed",
-                            Some(&format!("index:{};reason=tmp_create;err={}", i, e)),
-                        );
                         return Err(ManagerError::from(std::io::Error::new(
                             e.kind(),
                             format!("创建临时文件失败：{}", e),
@@ -172,10 +164,6 @@ impl Extractor {
                 };
 
                 if let Err(e) = std::io::copy(&mut file, &mut tmp_file) {
-                    report_event(
-                        "Extract.Entry.Failed",
-                        Some(&format!("index:{};reason=write;err={}", i, e)),
-                    );
                     return Err(ManagerError::from(std::io::Error::new(
                         e.kind(),
                         format!("写入临时文件失败：{}", e),
@@ -189,10 +177,6 @@ impl Extractor {
                     }
                     Err(e) => {
                         let _ = std::fs::remove_file(&tmp_path);
-                        report_event(
-                            "Extract.Entry.Failed",
-                            Some(&format!("index:{};reason=rename;err={}", i, e)),
-                        );
                         return Err(ManagerError::from(std::io::Error::other(format!(
                             "重命名或复制临时文件失败：{}",
                             e
@@ -206,12 +190,14 @@ impl Extractor {
             "Extract.Success",
             Some(&format!("count:{}", extracted_files.len())),
         );
+
         Ok(extracted_files)
     }
 
     /// 安装 BepInEx 到游戏根目录
     pub fn deploy_bepinex(zip_path: &Path, game_root: &Path, skip_plugins: bool) -> Result<()> {
         report_event("Deploy.BepInEx.Start", Some(&zip_path.to_string_lossy()));
+
         let res = if skip_plugins {
             Self::extract_zip_safe_with_exclusions(zip_path, game_root, &["BepInEx/plugins"])
         } else {
@@ -235,24 +221,27 @@ impl Extractor {
         let plugins_dir = game_root.join("BepInEx/plugins");
 
         if !plugins_dir.exists() {
+            report_event(
+                "Deploy.MetaMystia.Failed.NoPluginsDir",
+                Some(&plugins_dir.to_string_lossy()),
+            );
             return Err(ManagerError::Other(
                 "BepInEx/plugins 目录不存在，请先执行安装操作".to_string(),
             ));
         }
 
-        let dest = plugins_dir.join(
-            dll_path
-                .file_name()
-                .ok_or_else(|| ManagerError::Other("无效的文件名".to_string()))?,
-        );
+        let dest = plugins_dir.join(dll_path.file_name().ok_or_else(|| {
+            report_event(
+                "Deploy.MetaMystia.Failed.InvalidFileName",
+                Some(&dll_path.to_string_lossy()),
+            );
+            ManagerError::Other("无效的文件名".to_string())
+        })?);
 
         report_event("Deploy.MetaMystia.Start", Some(&dll_path.to_string_lossy()));
+
         let tmp_dest = dest.with_extension("dll.tmp");
         std::fs::copy(dll_path, &tmp_dest).map_err(|e| {
-            report_event(
-                "Deploy.MetaMystia.Failed",
-                Some(&format!("copy failed:{}", e)),
-            );
             ManagerError::from(std::io::Error::new(
                 e.kind(),
                 format!("复制文件失败：{}", e),
@@ -263,16 +252,10 @@ impl Extractor {
                 report_event("Deploy.MetaMystia.Success", Some(&dest.to_string_lossy()));
                 Ok(())
             }
-            Err(e) => {
-                report_event(
-                    "Deploy.MetaMystia.Failed",
-                    Some(&format!("rename failed:{}", e)),
-                );
-                Err(ManagerError::from(std::io::Error::other(format!(
-                    "安装失败：{}",
-                    e
-                ))))
-            }
+            Err(e) => Err(ManagerError::from(std::io::Error::other(format!(
+                "安装失败：{}",
+                e
+            )))),
         }
     }
 
@@ -295,12 +278,9 @@ impl Extractor {
         let dest = resourceex_dir.join(filename);
 
         report_event("Deploy.ResourceEx.Start", Some(&zip_path.to_string_lossy()));
+
         let tmp_dest = dest.with_extension("zip.tmp");
         std::fs::copy(zip_path, &tmp_dest).map_err(|e| {
-            report_event(
-                "Deploy.ResourceEx.Failed",
-                Some(&format!("copy failed:{}", e)),
-            );
             ManagerError::from(std::io::Error::new(
                 e.kind(),
                 format!("复制文件失败：{}", e),
@@ -311,16 +291,10 @@ impl Extractor {
                 report_event("Deploy.ResourceEx.Success", Some(&dest.to_string_lossy()));
                 Ok(())
             }
-            Err(e) => {
-                report_event(
-                    "Deploy.ResourceEx.Failed",
-                    Some(&format!("rename failed:{}", e)),
-                );
-                Err(ManagerError::from(std::io::Error::other(format!(
-                    "安装失败：{}",
-                    e
-                ))))
-            }
+            Err(e) => Err(ManagerError::from(std::io::Error::other(format!(
+                "安装失败：{}",
+                e
+            )))),
         }
     }
 }
