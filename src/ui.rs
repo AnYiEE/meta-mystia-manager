@@ -603,7 +603,7 @@ fn display_version(manager_version: Option<&str>) -> Result<()> {
                 style("升级提醒：您当前使用的不是最新版本，建议升级至最新版本。").yellow()
             );
             println!(
-                "前往下载：https://doc.meta-mystia.izakaya.cc/user_guide/how_to_install.html#onclick_install"
+                "手动下载：https://doc.meta-mystia.izakaya.cc/user_guide/how_to_install.html#onclick_install"
             );
         }
         println!();
@@ -671,7 +671,7 @@ fn blank_line() -> Result<()> {
 }
 
 fn wait_for_key() -> Result<()> {
-    println!("{}", style("按回车退出...").dim());
+    println!("{}", style("按回车（Enter）键退出...").dim());
 
     let mut line = String::new();
     std::io::stdin().read_line(&mut line)?;
@@ -685,7 +685,7 @@ fn path_display_steam_found(app_id: u32, name: Option<&str>, path: &Path) -> Res
     println!(
         "{}",
         style(format!(
-            "检测到 Steam 上的游戏：{}（AppID {}）",
+            "检测到 Steam 上已安装的游戏：{}（AppID {}）",
             name.unwrap_or("未知"),
             app_id
         ))
@@ -793,7 +793,8 @@ fn install_ask_install_resourceex() -> Result<bool> {
         "{}",
         style("ResourceExample ZIP 是 MetaMystia 的可选组件").cyan()
     );
-    println!("可以在游戏中加入由 MetaMystia 所提供的额外内容（如：新的稀客）");
+    println!("可以在游戏中加入由 MetaMystia 所提供的额外内容（如：新的稀客、料理和食材等）");
+    println!("更多介绍：https://doc.meta-mystia.izakaya.cc/resource_ex/use_resource-ex.html");
     println!();
 
     let confirmed = Confirm::with_theme(&ColorfulTheme::default())
@@ -1161,7 +1162,7 @@ fn download_version_info_parse_failed(err: &str, snippet: &str) -> Result<()> {
     println!(
         "{}",
         style(format!(
-            "版本信息 JSON 解析失败：{}，response snippet：{}",
+            "版本信息解析失败：{}，response snippet：{}",
             err, snippet
         ))
         .yellow()
@@ -1292,6 +1293,10 @@ fn network_retrying(
         .yellow()
     );
     println!("{}", style(format!("错误：{}", err)).yellow());
+    println!(
+        "{}",
+        style("提醒：若重试次数耗尽后仍失败，将自动切换至备用源下载，请耐心等待。").dim()
+    );
     Ok(())
 }
 
@@ -1299,7 +1304,7 @@ fn network_rate_limited(secs: u64) -> Result<()> {
     println!(
         "{}",
         style(format!(
-            "检测到限流，Retry-After={} 秒，等待后重试...",
+            "检测到限流，服务器指定 Retry-After={} 秒，将等待后重试...",
             secs
         ))
         .yellow()
