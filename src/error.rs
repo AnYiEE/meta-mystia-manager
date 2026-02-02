@@ -37,8 +37,8 @@ pub enum ManagerError {
     #[error("IO 错误：{0}")]
     Io(#[source] std::io::Error),
 
-    #[error("对话框错误：{0}")]
-    Dialog(String),
+    #[error("UI 错误：{0}")]
+    Ui(String),
 
     #[error("其他错误：{0}")]
     Other(String),
@@ -47,19 +47,11 @@ pub enum ManagerError {
     UserCancelled,
 }
 
-impl From<anyhow::Error> for ManagerError {
-    fn from(err: anyhow::Error) -> Self {
-        let s = err.to_string();
-        report_event("Error.From.Anyhow", Some(&s));
-        ManagerError::Other(s)
-    }
-}
-
 impl From<dialoguer::Error> for ManagerError {
     fn from(err: dialoguer::Error) -> Self {
         let s = err.to_string();
-        report_event("Error.From.Dialog", Some(&s));
-        ManagerError::Dialog(s)
+        report_event("Error.From.Ui", Some(&s));
+        ManagerError::Ui(s)
     }
 }
 

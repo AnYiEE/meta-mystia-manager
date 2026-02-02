@@ -55,7 +55,6 @@ dialoguer = "0.12"
 indicatif = "0.18"
 
 # 错误处理
-anyhow = "1.0"
 thiserror = "2.0"
 ctrlc = "3.5"
 
