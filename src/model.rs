@@ -52,3 +52,15 @@ impl VersionInfo {
         format!("meta-mystia-manager-v{}.exe", self.manager.trim())
     }
 }
+
+impl std::fmt::Display for VersionInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "BepInEx: {}, dll: {}, zip: {}",
+            self.bep_in_ex.trim(),
+            self.dll.trim(),
+            self.zip.trim()
+        )
+    }
+}
