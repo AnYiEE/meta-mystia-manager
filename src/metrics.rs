@@ -1,10 +1,11 @@
-use crate::error::Result;
+use crate::error::{ManagerError, Result};
 
 use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
 use reqwest::blocking::Client;
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::OnceLock;
+use std::sync::mpsc::{Sender, channel};
 use std::thread;
 use std::time::Duration;
 
@@ -83,24 +84,47 @@ pub fn get_user_id() -> String {
         .clone()
 }
 
-fn build_client() -> Result<Client> {
+static CACHED_CLIENT: OnceLock<Client> = OnceLock::new();
+
+fn get_client() -> Result<&'static Client> {
+    if let Some(c) = CACHED_CLIENT.get() {
+        return Ok(c);
+    }
+
     let client = Client::builder()
         .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
         .user_agent(crate::config::USER_AGENT)
         .build()
-        .map_err(|e| {
-            crate::error::ManagerError::NetworkError(format!("创建 metrics HTTP 客户端失败：{}", e))
-        })?;
+        .map_err(|e| ManagerError::NetworkError(format!("创建 metrics HTTP 客户端失败：{}", e)))?;
 
-    Ok(client)
+    Ok(CACHED_CLIENT.get_or_init(|| client))
 }
 
-fn send_tracking_request(url: String) {
+fn send_with_client(url: String) {
+    if let Ok(client) = get_client() {
+        let _ = client.get(&url).send();
+    }
+}
+
+fn start_tracking_worker() -> Sender<String> {
+    let (tx, rx) = channel::<String>();
+
     thread::spawn(move || {
-        if let Ok(client) = build_client() {
-            let _ = client.get(&url).send();
+        for url in rx {
+            send_with_client(url);
         }
     });
+
+    tx
+}
+
+static TRACKING_SENDER: OnceLock<Sender<String>> = OnceLock::new();
+
+fn send_tracking_request(url: String) {
+    let sender = TRACKING_SENDER.get_or_init(start_tracking_worker).clone();
+    if let Err(e) = sender.send(url) {
+        thread::spawn(move || send_with_client(e.0));
+    }
 }
 
 pub fn report_event(action: &str, name: Option<&str>) {
