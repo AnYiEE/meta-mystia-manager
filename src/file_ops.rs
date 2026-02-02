@@ -195,7 +195,7 @@ pub struct DeletionResult {
 
 /// 扫描实际存在的文件
 pub fn scan_existing_files(base: &Path, mode: UninstallMode) -> Vec<PathBuf> {
-    let targets = mode.get_targets();
+    let targets = mode.targets();
     let mut existing_files = Vec::new();
 
     for &(pattern, is_dir) in targets {

@@ -106,7 +106,7 @@ impl<'a> Installer<'a> {
         }
 
         // 4. 删除完全卸载模式中的其他文件
-        let full_targets = UninstallMode::Full.get_targets();
+        let full_targets = UninstallMode::Full.targets();
         for &(pattern, is_dir) in full_targets {
             if pattern == "BepInEx" || pattern == "ResourceEx" {
                 continue;

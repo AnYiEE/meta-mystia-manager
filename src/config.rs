@@ -1,3 +1,12 @@
+pub const GAME_EXECUTABLE: &str = "Touhou Mystia Izakaya.exe";
+pub const GAME_PROCESS_NAME: &str = "Touhou Mystia Izakaya.exe";
+pub const GAME_STEAM_APP_ID: u32 = 1_584_090;
+pub const USER_AGENT: &str = concat!(
+    "meta-mystia-manager/",
+    env!("CARGO_PKG_VERSION"),
+    " (+https://github.com/AnYiEE/meta-mystia-manager)"
+);
+
 pub enum UninstallMode {
     Light,
     Full,
@@ -19,14 +28,7 @@ impl UninstallMode {
         ("ResourceEx", true),
     ];
 
-    /// 要删除的目标（模式字符串，是否为目录）
-    pub fn get_targets(&self) -> &'static [(&'static str, bool)] {
-        match self {
-            UninstallMode::Light => Self::LIGHT_TARGETS,
-            UninstallMode::Full => Self::FULL_TARGETS,
-        }
-    }
-
+    /// 获取卸载模式描述
     pub fn description(&self) -> &str {
         match self {
             UninstallMode::Light => {
@@ -35,17 +37,15 @@ impl UninstallMode {
             UninstallMode::Full => "移除所有和 Mod 有关的文件（还原为原版游戏）",
         }
     }
+
+    /// 获取卸载目标列表（模式字符串，是否为目录）
+    pub fn targets(&self) -> &'static [(&'static str, bool)] {
+        match self {
+            UninstallMode::Light => Self::LIGHT_TARGETS,
+            UninstallMode::Full => Self::FULL_TARGETS,
+        }
+    }
 }
-
-pub const GAME_EXECUTABLE: &str = "Touhou Mystia Izakaya.exe";
-pub const GAME_PROCESS_NAME: &str = "Touhou Mystia Izakaya.exe";
-pub const GAME_STEAM_APP_ID: u32 = 1_584_090;
-
-pub const USER_AGENT: &str = concat!(
-    "meta-mystia-manager/",
-    env!("CARGO_PKG_VERSION"),
-    " (+https://github.com/AnYiEE/meta-mystia-manager)"
-);
 
 pub struct NetworkRetryConfig {
     /// 最大重试次数（至少 1）
@@ -69,6 +69,7 @@ impl Default for NetworkRetryConfig {
     }
 }
 
+/// 获取网络重试配置
 pub fn network_retry_config() -> NetworkRetryConfig {
     NetworkRetryConfig::default()
 }
@@ -91,6 +92,7 @@ impl Default for UninstallRetryConfig {
     }
 }
 
+/// 获取卸载重试配置
 pub fn uninstall_retry_config() -> UninstallRetryConfig {
     UninstallRetryConfig::default()
 }
