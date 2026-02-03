@@ -1,8 +1,8 @@
 use crate::config::UninstallMode;
+use crate::error::ManagerError;
 use crate::error::Result;
 use crate::metrics::{get_user_id, report_event};
 use crate::model::VersionInfo;
-
 use console::{Term, style};
 use dialoguer::{Confirm, Input, theme::ColorfulTheme};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -456,31 +456,31 @@ impl Ui for ConsoleUI {
             }
         };
 
-        let mut bars = match self.bars.lock() {
+        let mut guard = match self.bars.lock() {
             Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
+            Err(e) => e.into_inner(),
         };
-        bars.insert(id, pb);
+        guard.insert(id, pb);
 
         id
     }
 
     fn download_update(&self, id: usize, downloaded: u64) {
-        let bars = match self.bars.lock() {
+        let guard = match self.bars.lock() {
             Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
+            Err(e) => e.into_inner(),
         };
-        if let Some(pb) = bars.get(&id) {
+        if let Some(pb) = guard.get(&id) {
             pb.set_position(downloaded);
         }
     }
 
     fn download_finish(&self, id: usize, message: &str) {
-        let mut bars = match self.bars.lock() {
+        let mut guard = match self.bars.lock() {
             Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
+            Err(e) => e.into_inner(),
         };
-        if let Some(pb) = bars.remove(&id) {
+        if let Some(pb) = guard.remove(&id) {
             pb.finish_with_message(message.to_string());
         }
     }
@@ -675,7 +675,7 @@ fn select_operation_mode() -> Result<OperationMode> {
             "2" => return Ok(OperationMode::Upgrade),
             "3" => return Ok(OperationMode::Uninstall),
             "0" => {
-                std::process::exit(0);
+                return Err(ManagerError::UserCancelled);
             }
             _ => {
                 println!();
@@ -1030,7 +1030,7 @@ fn uninstall_select_uninstall_mode() -> Result<UninstallMode> {
             "1" => return Ok(UninstallMode::Light),
             "2" => return Ok(UninstallMode::Full),
             "0" => {
-                std::process::exit(0);
+                return Err(ManagerError::UserCancelled);
             }
             _ => {
                 println!();

@@ -75,18 +75,18 @@ impl<'a> Downloader<'a> {
 
     /// 获取版本信息
     pub fn get_version_info(&self) -> Result<VersionInfo> {
-        if let Ok(lock) = self.cached_version.lock()
-            && let Some(cached) = lock.clone()
+        if let Ok(guard) = self.cached_version.lock()
+            && let Some(cached) = guard.clone()
         {
             return Ok(cached);
         }
 
         let vi = self.retry("获取版本信息", || self.try_get_version_info())?;
-        let mut lock = match self.cached_version.lock() {
+        let mut guard = match self.cached_version.lock() {
             Ok(g) => g,
             Err(e) => e.into_inner(),
         };
-        *lock = Some(vi.clone());
+        *guard = Some(vi.clone());
 
         Ok(vi)
     }
@@ -349,8 +349,8 @@ impl<'a> Downloader<'a> {
     }
 
     fn fetch_github_release_json(&self) -> Result<serde_json::Value> {
-        if let Ok(lock) = self.cached_github_release.lock()
-            && let Some(json) = lock.clone()
+        if let Ok(guard) = self.cached_github_release.lock()
+            && let Some(json) = guard.clone()
         {
             return Ok(json);
         }
@@ -363,11 +363,11 @@ impl<'a> Downloader<'a> {
             "请求 GitHub API ",
         )?;
 
-        let mut lock = match self.cached_github_release.lock() {
+        let mut guard = match self.cached_github_release.lock() {
             Ok(g) => g,
             Err(e) => e.into_inner(),
         };
-        *lock = Some(json.clone());
+        *guard = Some(json.clone());
 
         Ok(json)
     }
