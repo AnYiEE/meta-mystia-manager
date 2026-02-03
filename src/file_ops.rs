@@ -6,7 +6,6 @@ use glob::glob;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-#[allow(clippy::permissions_set_readonly_false)]
 fn ensure_owner_writable(metadata: &std::fs::Metadata) -> std::fs::Permissions {
     let mut perms = metadata.permissions();
 
@@ -19,24 +18,26 @@ fn ensure_owner_writable(metadata: &std::fs::Metadata) -> std::fs::Permissions {
 
     #[cfg(not(unix))]
     {
+        #[allow(clippy::permissions_set_readonly_false)]
         perms.set_readonly(false);
     }
 
     perms
 }
 
+#[cfg(windows)]
 const ERROR_SHARING_VIOLATION: i32 = 32;
 
 /// 将 io::Error 映射为更具体的 UninstallError
 pub fn map_io_error_to_uninstall_error(err: &std::io::Error, path: &Path) -> ManagerError {
+    #[cfg(windows)]
     if let Some(code) = err.raw_os_error()
-        && cfg!(target_os = "windows")
         && code == ERROR_SHARING_VIOLATION
     {
-        ManagerError::FileInUse(path.display().to_string())
-    } else {
-        ManagerError::from(std::io::Error::new(err.kind(), err.to_string()))
+        return ManagerError::FileInUse(path.display().to_string());
     }
+
+    ManagerError::from(std::io::Error::new(err.kind(), err.to_string()))
 }
 
 /// 原子重命名或回退到 copy + remove
