@@ -61,6 +61,23 @@ impl<'a> Downloader<'a> {
         with_retry(self.ui, op_desc, f)
     }
 
+    fn convert_reqwest_error(&self, e: reqwest::Error) -> String {
+        if e.is_timeout() {
+            "请求超时".to_string()
+        } else if e.is_connect() {
+            "连接失败".to_string()
+        } else if e.is_status() {
+            format!(
+                "服务器返回错误：HTTP {}",
+                e.status()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "未知".to_string())
+            )
+        } else {
+            format!("请求失败：{}", e)
+        }
+    }
+
     fn file_api_url(share_code: &str, filename: &str) -> String {
         format!("{}/{}/{}", FILE_API, share_code, filename)
     }
@@ -82,11 +99,10 @@ impl<'a> Downloader<'a> {
         }
 
         let vi = self.retry("获取版本信息", || self.try_get_version_info())?;
-        let mut guard = match self.cached_version.lock() {
-            Ok(g) => g,
-            Err(e) => e.into_inner(),
-        };
-        *guard = Some(vi.clone());
+        *self
+            .cached_version
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(vi.clone());
 
         Ok(vi)
     }
@@ -95,24 +111,9 @@ impl<'a> Downloader<'a> {
         self.ui.download_version_info_start()?;
 
         let response = self.client.get(VERSION_API).send().map_err(|e| {
-            let _ = self.ui.download_version_info_failed(&format!("{}", e));
-
-            let base_msg = if e.is_timeout() {
-                "请求超时".to_string()
-            } else if e.is_connect() {
-                "连接失败".to_string()
-            } else if e.is_status() {
-                format!(
-                    "服务器返回错误：HTTP {}",
-                    e.status()
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| "未知".to_string())
-                )
-            } else {
-                format!("请求失败：{}", e)
-            };
-
-            ManagerError::NetworkError(base_msg)
+            let msg = self.convert_reqwest_error(e);
+            let _ = self.ui.download_version_info_failed(&msg);
+            ManagerError::NetworkError(msg)
         })?;
 
         if !response.status().is_success() {
@@ -155,24 +156,9 @@ impl<'a> Downloader<'a> {
         self.ui.download_share_code_start()?;
 
         let response = self.client.get(REDIRECT_URL).send().map_err(|e| {
-            let _ = self.ui.download_share_code_failed(&format!("{}", e));
-
-            let base_msg = if e.is_timeout() {
-                "请求超时".to_string()
-            } else if e.is_connect() {
-                "连接失败".to_string()
-            } else if e.is_status() {
-                format!(
-                    "服务器返回错误：HTTP {}",
-                    e.status()
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| "未知".to_string())
-                )
-            } else {
-                format!("请求失败：{}", e)
-            };
-
-            ManagerError::NetworkError(base_msg)
+            let msg = self.convert_reqwest_error(e);
+            let _ = self.ui.download_share_code_failed(&msg);
+            ManagerError::NetworkError(msg)
         })?;
 
         if !response.status().is_success() {
@@ -205,12 +191,9 @@ impl<'a> Downloader<'a> {
         file_size: Option<u64>,
         rate_limit: bool,
     ) -> Result<()> {
-        match self.retry("下载文件", || {
+        self.retry("下载文件", || {
             self.try_download(url, dest, file_size, rate_limit)
-        }) {
-            Ok(()) => Ok(()),
-            Err(_) => Err(ManagerError::DownloadFailed("多次重试后仍失败".to_string())),
-        }
+        })
     }
 
     fn try_download(
@@ -363,11 +346,10 @@ impl<'a> Downloader<'a> {
             "请求 GitHub API ",
         )?;
 
-        let mut guard = match self.cached_github_release.lock() {
-            Ok(g) => g,
-            Err(e) => e.into_inner(),
-        };
-        *guard = Some(json.clone());
+        *self
+            .cached_github_release
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(json.clone());
 
         Ok(json)
     }
