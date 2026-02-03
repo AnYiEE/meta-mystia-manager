@@ -92,12 +92,8 @@ impl Extractor {
                 )));
             }
 
-            // 禁止符号链接与特殊文件类型
-            if file
-                .unix_mode()
-                .map(|m| (m & 0o170000) == 0o120000)
-                .unwrap_or(false)
-            {
+            // 禁止符号链接
+            if file.is_symlink() {
                 report_event(
                     "Extract.Entry.Failed.SymlinkNotAllowed",
                     Some(&format!("index:{};path={}", i, file_path.display())),
@@ -111,7 +107,7 @@ impl Extractor {
 
             let should_exclude = exclude_patterns.iter().any(|pattern| {
                 let pat = Path::new(pattern);
-                file_path.starts_with(pat)
+                file_path == pat || file_path.starts_with(pat.join(""))
             });
 
             if should_exclude {
