@@ -1,17 +1,18 @@
 use crate::error::{ManagerError, Result};
+use crate::shutdown::SHUTDOWN_TIMEOUT;
 
 use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
 use reqwest::blocking::Client;
 use std::collections::HashMap;
 use std::process::Command;
-use std::sync::OnceLock;
-use std::sync::mpsc::{Sender, channel};
-use std::thread;
+use std::sync::mpsc::{RecvTimeoutError, Sender, channel};
+use std::sync::{Mutex, OnceLock};
+use std::thread::{JoinHandle, spawn};
 use std::time::Duration;
 
 const ID_SITE: &str = "13";
 const TRACKING_ENDPOINT: &str = "https://track.izakaya.cc/api.php";
-const DEFAULT_TIMEOUT_SECS: u64 = 10;
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn build_tracking_url(user_id: &str, params: &HashMap<&str, String>) -> String {
     let mut base = vec![
@@ -92,7 +93,7 @@ fn get_client() -> Result<&'static Client> {
     }
 
     let client = Client::builder()
-        .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
+        .timeout(DEFAULT_TIMEOUT)
         .user_agent(crate::config::USER_AGENT)
         .build()
         .map_err(|e| ManagerError::NetworkError(format!("创建 metrics HTTP 客户端失败：{}", e)))?;
@@ -106,25 +107,85 @@ fn send_with_client(url: String) {
     }
 }
 
+struct TrackingWorker {
+    sender: Sender<String>,
+    handle: JoinHandle<()>,
+}
+
+static TRACKING_WORKER: OnceLock<Mutex<Option<TrackingWorker>>> = OnceLock::new();
+
 fn start_tracking_worker() -> Sender<String> {
+    if let Some(m) = TRACKING_WORKER.get()
+        && let Ok(guard) = m.lock()
+        && let Some(w) = guard.as_ref()
+    {
+        return w.sender.clone();
+    }
+
     let (tx, rx) = channel::<String>();
 
-    thread::spawn(move || {
+    let handle = spawn(move || {
         for url in rx {
             send_with_client(url);
         }
     });
+    let worker = TrackingWorker {
+        sender: tx.clone(),
+        handle,
+    };
 
-    tx
+    let m = TRACKING_WORKER.get_or_init(|| Mutex::new(None));
+    let mut guard = match m.lock() {
+        Ok(g) => g,
+        Err(e) => e.into_inner(),
+    };
+
+    if guard.is_none() {
+        *guard = Some(worker);
+    }
+
+    guard.as_ref().map(|w| w.sender.clone()).unwrap_or(tx)
 }
 
-static TRACKING_SENDER: OnceLock<Sender<String>> = OnceLock::new();
-
 fn send_tracking_request(url: String) {
-    let sender = TRACKING_SENDER.get_or_init(start_tracking_worker).clone();
+    let sender = start_tracking_worker();
     if let Err(e) = sender.send(url) {
-        thread::spawn(move || send_with_client(e.0));
+        spawn(move || send_with_client(e.0));
     }
+}
+
+fn join_handle_with_timeout(h: JoinHandle<()>, timeout: Duration) -> bool {
+    let (tx, rx) = channel::<()>();
+
+    spawn(move || {
+        let _ = h.join();
+        let _ = tx.send(());
+    });
+
+    match rx.recv_timeout(timeout) {
+        Ok(_) => true,
+        Err(RecvTimeoutError::Timeout) => false,
+        Err(_) => true,
+    }
+}
+
+pub fn shutdown(timeout: Option<Duration>) -> Result<()> {
+    let Some(m) = TRACKING_WORKER.get() else {
+        return Ok(());
+    };
+
+    let to = timeout.unwrap_or(SHUTDOWN_TIMEOUT);
+    let mut guard = match m.lock() {
+        Ok(g) => g,
+        Err(e) => e.into_inner(),
+    };
+
+    if let Some(worker) = guard.take() {
+        drop(guard);
+        let _ = join_handle_with_timeout(worker.handle, to);
+    }
+
+    Ok(())
 }
 
 pub fn report_event(action: &str, name: Option<&str>) {

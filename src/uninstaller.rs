@@ -5,6 +5,7 @@ use crate::file_ops::{
 };
 use crate::metrics::report_event;
 use crate::permission::{elevate_and_restart, is_elevated};
+use crate::shutdown::run_shutdown;
 use crate::ui::Ui;
 
 use std::collections::HashSet;
@@ -138,6 +139,7 @@ impl<'a> Uninstaller<'a> {
             if has_permission_issue && !is_elevated && self.ui.uninstall_ask_elevate_permission()? {
                 elevate_and_restart()?;
                 self.ui.uninstall_restarting_elevated()?;
+                run_shutdown();
                 std::process::exit(0);
             }
 

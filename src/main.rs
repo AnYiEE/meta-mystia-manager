@@ -9,6 +9,7 @@ mod metrics;
 mod model;
 mod net;
 mod permission;
+mod shutdown;
 mod temp_dir;
 mod ui;
 mod uninstaller;
@@ -21,6 +22,7 @@ use crate::env_check::{check_game_directory, check_game_running};
 use crate::error::{ManagerError, Result};
 use crate::installer::Installer;
 use crate::metrics::report_event;
+use crate::shutdown::run_shutdown;
 use crate::ui::OperationMode::*;
 use crate::ui::{ConsoleUI, Ui};
 use crate::uninstaller::Uninstaller;
@@ -39,14 +41,19 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     }
 
-    match run(&console_ui) {
+    let res = match run(&console_ui) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             let _ = console_ui.error(&format!("错误：{}", e));
             console_ui.wait_for_key().ok();
             ExitCode::from(1)
         }
-    }
+    };
+
+    // 执行清理回调
+    run_shutdown();
+
+    res
 }
 
 fn run(ui: &dyn Ui) -> Result<()> {
@@ -80,6 +87,7 @@ fn run(ui: &dyn Ui) -> Result<()> {
         {
             match perform_self_update(&std::env::current_dir()?, ui, downloader, vi) {
                 Ok(()) => {
+                    run_shutdown();
                     std::process::exit(0);
                 }
                 Err(e) => ui.manager_update_failed(&format!("{}", e))?,
