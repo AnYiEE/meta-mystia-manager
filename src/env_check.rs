@@ -45,7 +45,7 @@ pub fn check_game_directory(ui: &dyn Ui) -> Result<PathBuf> {
             ui.path_display_steam_found(app.app_id, app.name.as_deref(), &candidate)?;
             if ui.path_confirm_use_steam_found()? {
                 ui.blank_line()?;
-                report_event("Env.SteamFound", Some(&candidate.to_string_lossy()));
+                report_event("Env.SteamFound", Some(&candidate.display().to_string()));
                 return Ok(candidate);
             } else {
                 ui.blank_line()?;
@@ -56,7 +56,10 @@ pub fn check_game_directory(ui: &dyn Ui) -> Result<PathBuf> {
     let current_dir = std::env::current_dir()?;
     let game_exe = current_dir.join(GAME_EXECUTABLE);
     if game_exe.is_file() {
-        report_event("Env.CurrentDirFound", Some(&current_dir.to_string_lossy()));
+        report_event(
+            "Env.CurrentDirFound",
+            Some(&current_dir.display().to_string()),
+        );
         return Ok(current_dir);
     }
 
@@ -73,7 +76,7 @@ pub fn check_game_running() -> Result<bool> {
             Err(e) => {
                 report_event(
                     "Env.GameRunning.CheckFailed.CreateToolhelp32Snapshot",
-                    Some(&format!("err={:?}", e)),
+                    Some(&format!("{:?}", e)),
                 );
                 return Err(ManagerError::ProcessListError(format!(
                     "无法获取进程列表：{:?}",
@@ -93,7 +96,7 @@ pub fn check_game_running() -> Result<bool> {
             Err(e) => {
                 report_event(
                     "Env.GameRunning.CheckFailed.Process32FirstW",
-                    Some(&format!("err={:?}", e)),
+                    Some(&format!("{:?}", e)),
                 );
                 return Err(ManagerError::ProcessListError(format!(
                     "读取进程列表失败：{:?}",

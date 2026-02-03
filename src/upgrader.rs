@@ -348,7 +348,7 @@ impl<'a> Upgrader<'a> {
                 std::fs::create_dir_all(&plugins_dir).map_err(|e| {
                     ManagerError::from(std::io::Error::new(
                         e.kind(),
-                        format!("创建 plugins 目录失败：{}", e),
+                        format!("创建 plugins 目录 {} 失败：{}", plugins_dir.display(), e),
                     ))
                 })?;
             }
@@ -357,11 +357,15 @@ impl<'a> Upgrader<'a> {
             std::fs::copy(&temp_path, &tmp_new).map_err(|e| {
                 ManagerError::from(std::io::Error::new(
                     e.kind(),
-                    format!("复制临时文件失败：{}", e),
+                    format!("复制临时文件 {} 失败：{}", tmp_new.display(), e),
                 ))
             })?;
             atomic_rename_or_copy(&tmp_new, &new_dll_path).map_err(|e| {
-                ManagerError::from(std::io::Error::other(format!("安装新版本失败：{}", e)))
+                ManagerError::from(std::io::Error::other(format!(
+                    "安装新版本 {} 失败：{}",
+                    new_dll_path.display(),
+                    e
+                )))
             })?;
 
             self.ui.upgrade_install_success(&new_dll_path)?;
@@ -408,11 +412,15 @@ impl<'a> Upgrader<'a> {
             std::fs::copy(&temp_path, &tmp_new).map_err(|e| {
                 ManagerError::from(std::io::Error::new(
                     e.kind(),
-                    format!("复制临时文件失败：{}", e),
+                    format!("复制临时文件 {} 失败：{}", tmp_new.display(), e),
                 ))
             })?;
             atomic_rename_or_copy(&tmp_new, &new_zip_path).map_err(|e| {
-                ManagerError::from(std::io::Error::other(format!("安装新版本失败：{}", e)))
+                ManagerError::from(std::io::Error::other(format!(
+                    "安装新版本 {} 失败：{}",
+                    new_zip_path.display(),
+                    e
+                )))
             })?;
 
             self.ui.upgrade_install_success(&new_zip_path)?;

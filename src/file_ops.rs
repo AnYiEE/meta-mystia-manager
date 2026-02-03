@@ -57,8 +57,11 @@ pub fn atomic_rename_or_copy(src: &Path, dst: &Path) -> Result<(), ManagerError>
 
             std::fs::copy(src, &tmp_path).map_err(|e| {
                 ManagerError::from(std::io::Error::other(format!(
-                    "重命名失败：{}；复制到临时文件失败：{}",
-                    rename_err, e
+                    "重命名 {} 失败：{}；复制到临时文件 {} 失败：{}",
+                    src.display(),
+                    rename_err,
+                    tmp_path.display(),
+                    e
                 )))
             })?;
 
@@ -74,7 +77,8 @@ pub fn atomic_rename_or_copy(src: &Path, dst: &Path) -> Result<(), ManagerError>
                 Err(e) => {
                     let _ = std::fs::remove_file(&tmp_path);
                     Err(ManagerError::from(std::io::Error::other(format!(
-                        "重命名或替换目标失败：{}",
+                        "重命名或替换目标 {} 失败：{}",
+                        dst.display(),
                         e
                     ))))
                 }

@@ -239,7 +239,11 @@ impl<'a> Installer<'a> {
             std::fs::create_dir_all(&bepinex_config_dir).map_err(|e| {
                 ManagerError::from(std::io::Error::new(
                     e.kind(),
-                    format!("创建 BepInEx 配置目录失败：{}", e),
+                    format!(
+                        "创建 BepInEx 配置目录 {} 失败：{}",
+                        bepinex_config_dir.display(),
+                        e
+                    ),
                 ))
             })?;
         }
@@ -278,12 +282,17 @@ UnityBaseLibrariesSource = https://url.izakaya.cc/unity-library
             std::fs::write(&bepinex_tmp_cfg, bepinex_cfg.as_bytes()).map_err(|e| {
                 ManagerError::from(std::io::Error::new(
                     e.kind(),
-                    format!("写入 BepInEx 临时配置文件失败：{}", e),
+                    format!(
+                        "写入 BepInEx 临时配置文件 {} 失败：{}",
+                        bepinex_tmp_cfg.display(),
+                        e
+                    ),
                 ))
             })?;
             atomic_rename_or_copy(&bepinex_tmp_cfg, &bepinex_cfg_path).map_err(|e| {
                 ManagerError::from(std::io::Error::other(format!(
-                    "写入 BepInEx 配置文件失败：{}",
+                    "写入 BepInEx 配置文件 {} 失败：{}",
+                    bepinex_cfg_path.display(),
                     e
                 )))
             })?;

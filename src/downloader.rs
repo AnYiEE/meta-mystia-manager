@@ -141,7 +141,7 @@ impl<'a> Downloader<'a> {
         })?;
 
         self.ui.download_version_info_success()?;
-        report_event("Download.VersionInfo.Success", Some(&vi.manager));
+        report_event("Download.VersionInfo.Success", Some(&vi.to_string()));
 
         Ok(vi)
     }
@@ -255,7 +255,7 @@ impl<'a> Downloader<'a> {
             std::fs::create_dir_all(parent).map_err(|e| {
                 ManagerError::from(std::io::Error::new(
                     e.kind(),
-                    format!("创建目录失败：{}", e),
+                    format!("创建目录 {} 失败：{}", parent.display(), e),
                 ))
             })?;
         }
@@ -270,7 +270,7 @@ impl<'a> Downloader<'a> {
         let mut tmp_file = std::fs::File::create(&tmp_path).map_err(|e| {
             ManagerError::from(std::io::Error::new(
                 e.kind(),
-                format!("创建临时文件失败：{}", e),
+                format!("创建临时文件 {} 失败：{}", tmp_path.display(), e),
             ))
         })?;
 
@@ -293,7 +293,7 @@ impl<'a> Downloader<'a> {
             tmp_file.write_all(&buffer[..n]).map_err(|e| {
                 ManagerError::from(std::io::Error::new(
                     e.kind(),
-                    format!("写入临时文件失败：{}", e),
+                    format!("写入临时文件 {} 失败：{}", tmp_path.display(), e),
                 ))
             })?;
             downloaded += n as u64;
@@ -319,7 +319,7 @@ impl<'a> Downloader<'a> {
         tmp_file.flush().map_err(|e| {
             ManagerError::from(std::io::Error::new(
                 e.kind(),
-                format!("同步临时文件失败：{}", e),
+                format!("同步临时文件 {} 失败：{}", tmp_path.display(), e),
             ))
         })?;
 
@@ -340,7 +340,8 @@ impl<'a> Downloader<'a> {
             Err(e) => {
                 let _ = std::fs::remove_file(&tmp_path);
                 Err(ManagerError::from(std::io::Error::other(format!(
-                    "重命名或复制临时文件失败：{}",
+                    "重命名或复制临时文件 {} 失败：{}",
+                    tmp_path.display(),
                     e
                 ))))
             }
@@ -568,7 +569,7 @@ impl<'a> Downloader<'a> {
                         "从 bepinex.dev 下载失败 ({}), 切换到备用源...",
                         e
                     ))?;
-                    report_event("Download.BepInEx.Failed.Primary", Some(version));
+                    report_event("Download.BepInEx.Failed.Primary", Some(&format!("{}", e)));
 
                     let share_code = self.get_share_code()?;
                     let fallback_url = Self::file_api_url(&share_code, &filename_with_version);

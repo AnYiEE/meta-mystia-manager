@@ -18,7 +18,7 @@ where
     for attempt in 0..cfg.attempts {
         match f() {
             Ok(v) => return Ok(v),
-            Err(e) if attempt < cfg.attempts => {
+            Err(e) if attempt < cfg.attempts - 1 => {
                 let raw = (cfg.base_delay_secs as f64) * cfg.multiplier.powi(attempt as i32);
                 let delay_secs = raw.min(cfg.max_delay_secs as f64).ceil() as u64;
 
@@ -41,16 +41,14 @@ where
 
                 sleep(Duration::from_secs(delay_secs));
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                report_event("Network.RetryFailed", Some(op_desc));
+                return Err(e);
+            }
         }
     }
 
-    report_event("Network.RetryFailed", Some(op_desc));
-
-    Err(ManagerError::NetworkError(format!(
-        "{}达到最大重试次数",
-        op_desc
-    )))
+    unreachable!()
 }
 
 fn parse_retry_after_seconds(hv: Option<&HeaderValue>) -> Option<u64> {
@@ -64,15 +62,15 @@ fn check_response_status(resp: &Response, ui: &dyn Ui, op_desc: &str) -> Result<
     }
 
     if resp.status().as_u16() == 429 {
-        let retry_after = parse_retry_after_seconds(resp.headers().get(RETRY_AFTER));
-        if retry_after.is_some_and(|s| s <= 30) {
-            let s = retry_after.unwrap();
-            ui.network_rate_limited(s)?;
+        if let Some(secs) = parse_retry_after_seconds(resp.headers().get(RETRY_AFTER))
+            && secs <= 30
+        {
+            ui.network_rate_limited(secs)?;
             report_event(
                 "Network.RateLimited",
-                Some(&format!("{};retry_after={}", op_desc, s)),
+                Some(&format!("{};retry_after={}", op_desc, secs)),
             );
-            sleep(Duration::from_secs(s));
+            sleep(Duration::from_secs(secs));
         } else {
             report_event("Network.RateLimited", Some(op_desc));
         }

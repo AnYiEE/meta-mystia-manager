@@ -80,7 +80,7 @@ pub fn elevate_and_restart() -> Result<()> {
     std::fs::write(&script_path, script.as_bytes()).map_err(|e| {
         ManagerError::from(std::io::Error::new(
             e.kind(),
-            format!("写入提升脚本失败：{}", e),
+            format!("写入提升脚本 {} 失败：{}", script_path.display(), e),
         ))
     })?;
 

@@ -44,7 +44,7 @@ pub fn perform_self_update(
             report_event("SelfUpdate.Failed.Copy", Some(&format!("{}", e)));
             return Err(ManagerError::from(std::io::Error::new(
                 e.kind(),
-                format!("复制到运行目录失败：{}", e),
+                format!("复制到运行目录 {} 失败：{}", target_path.display(), e),
             )));
         }
     }
@@ -63,14 +63,14 @@ pub fn perform_self_update(
         report_event("SelfUpdate.Failed.ScriptWrite", Some(&format!("{}", e)));
         ManagerError::from(std::io::Error::new(
             e.kind(),
-            format!("写入升级脚本失败：{}", e),
+            format!("写入升级脚本 {} 失败：{}", script_path.display(), e),
         ))
     })?;
 
     if !script_path.exists() {
         report_event(
             "SelfUpdate.Failed.ScriptMissing",
-            Some(&script_path.to_string_lossy()),
+            Some(&script_path.display().to_string()),
         );
         ui.manager_update_failed("升级脚本不存在")?;
         return Err(ManagerError::from(std::io::Error::new(

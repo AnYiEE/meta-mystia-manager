@@ -131,19 +131,19 @@ pub fn create_temp_dir_with_guard(base: &Path) -> std::io::Result<(PathBuf, DirG
     {
         report_event(
             "TempDir.CleanupFailed",
-            Some(&format!("{};err={}", temp_dir.to_string_lossy(), e)),
+            Some(&format!("{};err={}", temp_dir.display(), e)),
         );
     }
 
     if let Err(e) = std::fs::create_dir_all(&temp_dir) {
         report_event(
             "TempDir.CreateFailed",
-            Some(&format!("{};err={}", temp_dir.to_string_lossy(), e)),
+            Some(&format!("{};err={}", temp_dir.display(), e)),
         );
         return Err(e);
     }
 
-    report_event("TempDir.Created", Some(&temp_dir.to_string_lossy()));
+    report_event("TempDir.Created", Some(&temp_dir.display().to_string()));
 
     Ok((temp_dir.clone(), DirGuard::new(temp_dir)))
 }
