@@ -1,4 +1,4 @@
-use crate::config::network_retry_config;
+use crate::config::RetryConfig;
 use crate::error::{ManagerError, Result};
 use crate::metrics::report_event;
 use crate::ui::Ui;
@@ -13,7 +13,7 @@ pub fn with_retry<F, T>(ui: &dyn Ui, op_desc: &str, mut f: F) -> Result<T>
 where
     F: FnMut() -> Result<T>,
 {
-    let cfg = network_retry_config();
+    let cfg = RetryConfig::network();
 
     for attempt in 0..cfg.attempts {
         match f() {

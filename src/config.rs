@@ -47,7 +47,8 @@ impl UninstallMode {
     }
 }
 
-pub struct NetworkRetryConfig {
+/// 通用重试配置
+pub struct RetryConfig {
     /// 最大重试次数（至少 1）
     pub attempts: usize,
     /// 基础延迟（秒）
@@ -58,8 +59,9 @@ pub struct NetworkRetryConfig {
     pub max_delay_secs: u64,
 }
 
-impl Default for NetworkRetryConfig {
-    fn default() -> Self {
+impl RetryConfig {
+    /// 网络操作的默认重试配置
+    pub const fn network() -> Self {
         Self {
             attempts: 3,
             base_delay_secs: 5,
@@ -67,22 +69,9 @@ impl Default for NetworkRetryConfig {
             max_delay_secs: 15,
         }
     }
-}
 
-/// 获取网络重试配置
-pub fn network_retry_config() -> NetworkRetryConfig {
-    NetworkRetryConfig::default()
-}
-
-pub struct UninstallRetryConfig {
-    pub attempts: usize,
-    pub base_delay_secs: u64,
-    pub multiplier: f64,
-    pub max_delay_secs: u64,
-}
-
-impl Default for UninstallRetryConfig {
-    fn default() -> Self {
+    /// 卸载操作的默认重试配置
+    pub const fn uninstall() -> Self {
         Self {
             attempts: 3,
             base_delay_secs: 10,
@@ -90,9 +79,4 @@ impl Default for UninstallRetryConfig {
             max_delay_secs: 60,
         }
     }
-}
-
-/// 获取卸载重试配置
-pub fn uninstall_retry_config() -> UninstallRetryConfig {
-    UninstallRetryConfig::default()
 }

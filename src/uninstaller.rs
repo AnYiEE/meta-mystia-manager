@@ -1,4 +1,4 @@
-use crate::config::uninstall_retry_config;
+use crate::config::RetryConfig;
 use crate::error::{ManagerError, Result};
 use crate::file_ops::{
     DeletionStatus, count_results, execute_deletion, extract_failed_files, scan_existing_files,
@@ -87,7 +87,7 @@ impl<'a> Uninstaller<'a> {
             if !in_use_failures.is_empty() {
                 self.ui.uninstall_files_in_use_warning()?;
 
-                let cfg = uninstall_retry_config();
+                let cfg = RetryConfig::uninstall();
                 let mut still_in_use = in_use_failures.clone();
 
                 for attempt in 0..cfg.attempts {
