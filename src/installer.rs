@@ -268,17 +268,19 @@ Enabled = false
 UnityBaseLibrariesSource = https://url.izakaya.cc/unity-library
 "#;
 
-        let mut bepinex_cfg_parts: Vec<String> = Vec::new();
+        let mut bepinex_cfg = String::new();
         if !show_bepinex_console {
-            bepinex_cfg_parts.push(bepinex_cfg_logging.to_string());
+            bepinex_cfg.push_str(bepinex_cfg_logging);
         }
         if !bepinex_from_primary {
-            bepinex_cfg_parts.push(bepinex_cfg_il2cpp.to_string());
+            if !bepinex_cfg.is_empty() {
+                bepinex_cfg.push('\n');
+            }
+            bepinex_cfg.push_str(bepinex_cfg_il2cpp);
         }
-
-        let bepinex_cfg = bepinex_cfg_parts.join("\n");
         if !bepinex_cfg.is_empty() {
             let bepinex_tmp_cfg = bepinex_cfg_path.with_extension("cfg.tmp");
+
             std::fs::write(&bepinex_tmp_cfg, bepinex_cfg.as_bytes()).map_err(|e| {
                 ManagerError::from(std::io::Error::new(
                     e.kind(),
@@ -289,13 +291,20 @@ UnityBaseLibrariesSource = https://url.izakaya.cc/unity-library
                     ),
                 ))
             })?;
-            atomic_rename_or_copy(&bepinex_tmp_cfg, &bepinex_cfg_path).map_err(|e| {
-                ManagerError::from(std::io::Error::other(format!(
-                    "写入 BepInEx 配置文件 {} 失败：{}",
-                    bepinex_cfg_path.display(),
-                    e
-                )))
-            })?;
+
+            match atomic_rename_or_copy(&bepinex_tmp_cfg, &bepinex_cfg_path) {
+                Ok(_) => {
+                    let _ = std::fs::remove_file(&bepinex_tmp_cfg);
+                }
+                Err(e) => {
+                    let _ = std::fs::remove_file(&bepinex_tmp_cfg);
+                    return Err(ManagerError::from(std::io::Error::other(format!(
+                        "写入 BepInEx 配置文件 {} 失败：{}",
+                        bepinex_cfg_path.display(),
+                        e
+                    ))));
+                }
+            }
         }
 
         // 安装 MetaMystia DLL
