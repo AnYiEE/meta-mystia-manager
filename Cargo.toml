@@ -53,6 +53,7 @@ zip = "7.2"
 console = "0.16"
 dialoguer = "0.12"
 indicatif = "0.18"
+termimad = "0.34.1"
 
 # 错误处理
 thiserror = "2.0"

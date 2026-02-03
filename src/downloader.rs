@@ -28,6 +28,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(5); // 连接超时
 pub struct Downloader<'a> {
     client: Client,
     ui: &'a dyn Ui,
+    cached_github_release: Mutex<Option<serde_json::Value>>,
     cached_version: Mutex<Option<VersionInfo>>,
 }
 
@@ -37,6 +38,7 @@ impl<'a> Downloader<'a> {
         Ok(Self {
             client,
             ui,
+            cached_github_release: Mutex::new(None),
             cached_version: Mutex::new(None),
         })
     }
@@ -82,7 +84,7 @@ impl<'a> Downloader<'a> {
         let vi = self.retry("获取版本信息", || self.try_get_version_info())?;
         let mut lock = match self.cached_version.lock() {
             Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
+            Err(e) => e.into_inner(),
         };
         *lock = Some(vi.clone());
 
@@ -94,6 +96,7 @@ impl<'a> Downloader<'a> {
 
         let response = self.client.get(VERSION_API).send().map_err(|e| {
             let _ = self.ui.download_version_info_failed(&format!("{}", e));
+
             let base_msg = if e.is_timeout() {
                 "请求超时".to_string()
             } else if e.is_connect() {
@@ -108,6 +111,7 @@ impl<'a> Downloader<'a> {
             } else {
                 format!("请求失败：{}", e)
             };
+
             ManagerError::NetworkError(base_msg)
         })?;
 
@@ -124,6 +128,7 @@ impl<'a> Downloader<'a> {
 
         let vi: VersionInfo = serde_json::from_str(&text).map_err(|e| {
             let snippet: String = text.chars().take(200).collect();
+
             let _ = self
                 .ui
                 .download_version_info_parse_failed(&format!("{}", e), &snippet);
@@ -131,6 +136,7 @@ impl<'a> Downloader<'a> {
                 "Download.VersionInfo.ParseFailed",
                 Some(&format!("err={};snippet={}", e, snippet)),
             );
+
             ManagerError::Other(format!("解析版本信息失败：{}", e))
         })?;
 
@@ -150,6 +156,7 @@ impl<'a> Downloader<'a> {
 
         let response = self.client.get(REDIRECT_URL).send().map_err(|e| {
             let _ = self.ui.download_share_code_failed(&format!("{}", e));
+
             let base_msg = if e.is_timeout() {
                 "请求超时".to_string()
             } else if e.is_connect() {
@@ -164,6 +171,7 @@ impl<'a> Downloader<'a> {
             } else {
                 format!("请求失败：{}", e)
             };
+
             ManagerError::NetworkError(base_msg)
         })?;
 
@@ -226,7 +234,6 @@ impl<'a> Downloader<'a> {
         }
 
         let total_size = file_size.or_else(|| response.content_length());
-
         let filename = dest
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -269,6 +276,7 @@ impl<'a> Downloader<'a> {
 
         let buf_len = cmp::min(RATE_LIMIT, 8192) as usize;
         let mut buffer = vec![0; buf_len];
+
         let mut downloaded = 0u64;
         let start = Instant::now();
 
@@ -289,6 +297,7 @@ impl<'a> Downloader<'a> {
                 ))
             })?;
             downloaded += n as u64;
+
             self.ui.download_update(id, downloaded);
 
             if rate_limit {
@@ -338,8 +347,12 @@ impl<'a> Downloader<'a> {
         }
     }
 
-    fn get_dll_download_url_from_github(&self) -> Result<String> {
-        self.ui.download_attempt_github_dll()?;
+    fn fetch_github_release_json(&self) -> Result<serde_json::Value> {
+        if let Ok(lock) = self.cached_github_release.lock()
+            && let Some(json) = lock.clone()
+        {
+            return Ok(json);
+        }
 
         let json: serde_json::Value = get_json_with_retry(
             &self.client,
@@ -348,6 +361,20 @@ impl<'a> Downloader<'a> {
             Some("application/vnd.github+json"),
             "请求 GitHub API ",
         )?;
+
+        let mut lock = match self.cached_github_release.lock() {
+            Ok(g) => g,
+            Err(e) => e.into_inner(),
+        };
+        *lock = Some(json.clone());
+
+        Ok(json)
+    }
+
+    fn get_dll_download_url_from_github(&self) -> Result<String> {
+        self.ui.download_attempt_github_dll()?;
+
+        let json = self.fetch_github_release_json()?;
 
         if let Some(assets) = json["assets"].as_array() {
             for asset in assets {
@@ -373,6 +400,43 @@ impl<'a> Downloader<'a> {
         Err(ManagerError::NetworkError(
             "未找到 MetaMystia DLL 文件".to_string(),
         ))
+    }
+
+    fn get_github_release_notes(&self) -> Result<Option<(String, String, String)>> {
+        let json = self.fetch_github_release_json()?;
+
+        let tag = json["tag_name"].as_str().unwrap_or("").to_string();
+        let name = json["name"].as_str().unwrap_or("").to_string();
+        let body = json["body"].as_str().unwrap_or("").to_string();
+
+        if tag.is_empty() && name.is_empty() && body.trim().is_empty() {
+            report_event("Download.GitHub.ReleaseNotes.Empty", None);
+            Ok(None)
+        } else {
+            report_event("Download.GitHub.ReleaseNotes.Found", Some(&tag));
+            Ok(Some((tag, name, body)))
+        }
+    }
+
+    /// 获取并显示 GitHub Release Notes
+    pub fn fetch_and_display_github_release_notes(
+        &self,
+    ) -> Result<Option<(String, String, String)>> {
+        match self.get_github_release_notes() {
+            Ok(Some((tag, name, body))) => {
+                self.ui
+                    .download_display_github_release_notes(&tag, &name, &body)?;
+                Ok(Some((tag, name, body)))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => {
+                report_event(
+                    "Download.GitHub.ReleaseNotes.Failed",
+                    Some(&format!("{}", e)),
+                );
+                Ok(None)
+            }
+        }
     }
 
     /// 下载 MetaMystia DLL
@@ -486,11 +550,10 @@ impl<'a> Downloader<'a> {
         )
         .to_string();
 
-        let primary_url = format!("{}/{}/{}", BEPINEX_PRIMARY, version, filename);
-
         self.ui.download_bepinex_attempt_primary()?;
         report_event("Download.BepInEx.Start", Some(version));
 
+        let primary_url = format!("{}/{}/{}", BEPINEX_PRIMARY, version, filename);
         let primary_result =
             get_response_with_retry(&self.client, self.ui, &primary_url, "请求 BepInEx 主源");
 

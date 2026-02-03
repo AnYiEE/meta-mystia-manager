@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use termimad::MadSkin;
 
 /// 操作模式枚举
 pub enum OperationMode {
@@ -132,6 +133,13 @@ pub trait Ui: Send + Sync {
     fn download_attempt_github_dll(&self) -> Result<()>;
     fn download_found_github_asset(&self, name: &str) -> Result<()>;
     fn download_github_dll_not_found(&self) -> Result<()>;
+    fn download_display_github_release_notes(
+        &self,
+        tag: &str,
+        name: &str,
+        body: &str,
+    ) -> Result<()>;
+    fn download_ask_continue_after_release_notes(&self) -> Result<bool>;
     fn download_switch_to_fallback(&self, reason: &str) -> Result<()>;
     fn download_try_fallback_metamystia(&self) -> Result<()>;
     fn download_resourceex_start(&self) -> Result<()>;
@@ -517,6 +525,19 @@ impl Ui for ConsoleUI {
         download_github_dll_not_found()
     }
 
+    fn download_display_github_release_notes(
+        &self,
+        tag: &str,
+        name: &str,
+        body: &str,
+    ) -> Result<()> {
+        download_display_github_release_notes(tag, name, body)
+    }
+
+    fn download_ask_continue_after_release_notes(&self) -> Result<bool> {
+        download_ask_continue_after_release_notes()
+    }
+
     fn download_switch_to_fallback(&self, reason: &str) -> Result<()> {
         download_switch_to_fallback(reason)
     }
@@ -698,21 +719,18 @@ fn path_display_steam_found(app_id: u32, name: Option<&str>, path: &Path) -> Res
 }
 
 fn path_confirm_use_steam_found() -> Result<bool> {
-    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
         .with_prompt(" 是否将此路径作为运行目录并继续？")
         .default(true)
         .interact_on_opt(&Term::stdout())?;
+    let choice = confirm.unwrap_or(false);
 
-    match confirmed {
-        Some(true) => {
-            report_event("UI.SteamPathChoice", Some("yes"));
-            Ok(true)
-        }
-        _ => {
-            report_event("UI.SteamPathChoice", Some("no"));
-            Ok(false)
-        }
-    }
+    report_event(
+        "UI.SteamPath.Choice",
+        Some(if choice { "yes" } else { "no" }),
+    );
+
+    Ok(choice)
 }
 
 // ==================== 安装相关 UI ====================
@@ -770,21 +788,18 @@ fn install_warn_existing(
 }
 
 fn install_confirm_overwrite() -> Result<bool> {
-    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
         .with_prompt(" 是否继续安装？")
         .default(false)
         .interact_on_opt(&Term::stdout())?;
+    let choice = confirm.unwrap_or(false);
 
-    match confirmed {
-        Some(true) => {
-            report_event("UI.Install.Confirm", Some("yes"));
-            Ok(true)
-        }
-        _ => {
-            report_event("UI.Install.Confirm", Some("no"));
-            Ok(false)
-        }
-    }
+    report_event(
+        "UI.Install.Confirm",
+        Some(if choice { "yes" } else { "no" }),
+    );
+
+    Ok(choice)
 }
 
 fn install_ask_install_resourceex() -> Result<bool> {
@@ -797,41 +812,35 @@ fn install_ask_install_resourceex() -> Result<bool> {
     println!("更多介绍：https://doc.meta-mystia.izakaya.cc/resource_ex/use_resource-ex.html");
     println!();
 
-    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
         .with_prompt(" 是否安装 ResourceExample ZIP？")
         .default(true)
         .interact_on_opt(&Term::stdout())?;
+    let choice = confirm.unwrap_or(false);
 
-    match confirmed {
-        Some(true) => {
-            report_event("UI.Install.ResourceEx", Some("yes"));
-            Ok(true)
-        }
-        _ => {
-            report_event("UI.Install.ResourceEx", Some("no"));
-            Ok(false)
-        }
-    }
+    report_event(
+        "UI.Install.ResourceEx.Choice",
+        Some(if choice { "yes" } else { "no" }),
+    );
+
+    Ok(choice)
 }
 
 fn install_ask_show_bepinex_console() -> Result<bool> {
     println!();
 
-    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
         .with_prompt(" 是否在游戏启动时弹出 BepInEx 的控制台窗口用于显示日志？")
         .default(false)
         .interact_on_opt(&Term::stdout())?;
+    let choice = confirm.unwrap_or(false);
 
-    match confirmed {
-        Some(true) => {
-            report_event("UI.Install.BepInExConsole", Some("yes"));
-            Ok(true)
-        }
-        _ => {
-            report_event("UI.Install.BepInExConsole", Some("no"));
-            Ok(false)
-        }
-    }
+    report_event(
+        "UI.Install.BepInExConsole.Choice",
+        Some(if choice { "yes" } else { "no" }),
+    );
+
+    Ok(choice)
 }
 
 fn install_downloads_completed() -> Result<()> {
@@ -1054,21 +1063,18 @@ fn uninstall_display_target_files(files: &[PathBuf]) -> Result<()> {
 }
 
 fn uninstall_confirm_deletion() -> Result<bool> {
-    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
-        .with_prompt(" 是否继续？")
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(" 是否继续当前操作？")
         .default(false)
         .interact_on_opt(&Term::stdout())?;
+    let choice = confirm.unwrap_or(false);
 
-    match confirmed {
-        Some(true) => {
-            report_event("UI.Uninstall.Confirm", Some("yes"));
-            Ok(true)
-        }
-        _ => {
-            report_event("UI.Uninstall.Confirm", Some("no"));
-            Ok(false)
-        }
-    }
+    report_event(
+        "UI.Uninstall.Confirm.Choice",
+        Some(if choice { "yes" } else { "no" }),
+    );
+
+    Ok(choice)
 }
 
 fn uninstall_files_in_use_warning() -> Result<()> {
@@ -1097,15 +1103,14 @@ fn uninstall_ask_elevate_permission() -> Result<bool> {
     );
     println!();
 
-    let elevate = Confirm::with_theme(&ColorfulTheme::default())
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
         .with_prompt(" 是否以管理员权限重新运行？")
-        .default(true)
+        .default(false)
         .interact_on_opt(&Term::stdout())?;
-
-    let choice = elevate.unwrap_or(false);
+    let choice = confirm.unwrap_or(false);
 
     report_event(
-        "UI.Uninstall.Elevate",
+        "UI.Uninstall.Elevate.Choice",
         Some(if choice { "yes" } else { "no" }),
     );
 
@@ -1120,15 +1125,15 @@ fn uninstall_restarting_elevated() -> Result<()> {
 
 fn uninstall_ask_retry_failures() -> Result<bool> {
     println!();
-    let retry = Confirm::with_theme(&ColorfulTheme::default())
-        .with_prompt(" 是否重试失败的项目？")
-        .default(true)
-        .interact_on_opt(&Term::stdout())?;
 
-    let choice = retry.unwrap_or(false);
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(" 是否重试失败的项目？")
+        .default(false)
+        .interact_on_opt(&Term::stdout())?;
+    let choice = confirm.unwrap_or(false);
 
     report_event(
-        "UI.Uninstall.Retry",
+        "UI.Uninstall.Retry.Choice",
         Some(if choice { "yes" } else { "no" }),
     );
 
@@ -1198,6 +1203,45 @@ fn download_found_github_asset(name: &str) -> Result<()> {
 fn download_github_dll_not_found() -> Result<()> {
     println!("{}", style("未找到 MetaMystia DLL 文件").yellow());
     Ok(())
+}
+
+fn download_display_github_release_notes(tag: &str, name: &str, body: &str) -> Result<()> {
+    println!();
+    println!(
+        "{}",
+        style(format!("GitHub Release：{}（{}）", name, tag)).cyan()
+    );
+
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        println!("{}", style("（无 Release Notes）").dim());
+    } else {
+        println!("{}", "-".repeat(60));
+
+        let skin = MadSkin::default();
+        skin.print_text(trimmed);
+
+        println!("{}", "-".repeat(60));
+    }
+
+    Ok(())
+}
+
+fn download_ask_continue_after_release_notes() -> Result<bool> {
+    println!();
+
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(" 是否继续当前操作？")
+        .default(false)
+        .interact_on_opt(&Term::stdout())?;
+    let choice = confirm.unwrap_or(false);
+
+    report_event(
+        "UI.Download.GitHubReleaseNotes.Choice",
+        Some(if choice { "yes" } else { "no" }),
+    );
+
+    Ok(choice)
 }
 
 fn download_switch_to_fallback(reason: &str) -> Result<()> {
@@ -1322,23 +1366,20 @@ fn manager_ask_self_update(current_version: &str, latest_version: &str) -> Resul
     );
     println!();
 
-    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
         .with_prompt(" 是否立即升级？")
-        .default(false)
+        .default(true)
         .interact_on_opt(&Term::stdout())?;
+    let choice = confirm.unwrap_or(false);
 
-    match confirmed {
-        Some(true) => {
-            report_event("UI.SelfUpdate.Choice", Some("yes"));
-            println!();
-            Ok(true)
-        }
-        _ => {
-            report_event("UI.SelfUpdate.Choice", Some("no"));
-            println!();
-            Ok(false)
-        }
-    }
+    report_event(
+        "UI.SelfUpdate.Choice",
+        Some(if choice { "yes" } else { "no" }),
+    );
+
+    println!();
+
+    Ok(choice)
 }
 
 fn manager_update_starting() -> Result<()> {

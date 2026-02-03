@@ -143,6 +143,17 @@ impl<'a> Installer<'a> {
         self.ui.install_display_version_info(&version_info);
         report_event("Install.VersionInfo", Some(&version_info.to_string()));
 
+        // 显示 GitHub Release Notes（如有），在用户确认安装前展示并询问是否继续
+        match self.downloader.fetch_and_display_github_release_notes() {
+            Ok(Some(_)) => {
+                if !self.ui.download_ask_continue_after_release_notes()? {
+                    return Err(ManagerError::UserCancelled);
+                }
+            }
+            Ok(None) => {}
+            Err(_) => {}
+        }
+
         // 2. 获取分享码
         self.ui.install_display_step(2, "获取下载链接");
         let share_code = self.downloader.get_share_code()?;

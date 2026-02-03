@@ -252,6 +252,17 @@ impl<'a> Upgrader<'a> {
         if dll_needs_upgrade {
             self.ui
                 .upgrade_detected_new_dll(&current_dll_version, new_dll_version)?;
+
+            // 显示 GitHub Release Notes（如有），在用户确认安装前展示并询问是否继续
+            match self.downloader.fetch_and_display_github_release_notes() {
+                Ok(Some(_)) => {
+                    if !self.ui.download_ask_continue_after_release_notes()? {
+                        return Err(ManagerError::UserCancelled);
+                    }
+                }
+                Ok(None) => {}
+                Err(_) => {}
+            }
         } else {
             self.ui.upgrade_dll_already_latest()?;
         }
