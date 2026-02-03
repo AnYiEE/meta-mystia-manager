@@ -8,8 +8,25 @@ use crate::ui::Ui;
 use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::Command;
+use windows::Win32::System::Threading::CREATE_NO_WINDOW;
 
-const CREATE_NO_WINDOW: u32 = 0x08000000;
+struct TempScript(std::path::PathBuf);
+
+impl TempScript {
+    fn new(path: std::path::PathBuf) -> Self {
+        Self(path)
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for TempScript {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
 
 pub fn perform_self_update(
     game_root: &Path,
@@ -67,7 +84,8 @@ pub fn perform_self_update(
         ))
     })?;
 
-    if !script_path.exists() {
+    let temp_script = TempScript::new(script_path.clone());
+    if !temp_script.path().exists() {
         report_event(
             "SelfUpdate.Failed.ScriptMissing",
             Some(&script_path.display().to_string()),
@@ -88,8 +106,8 @@ pub fn perform_self_update(
             .arg("-ExecutionPolicy")
             .arg("Bypass")
             .arg("-File")
-            .arg(&script_path)
-            .creation_flags(CREATE_NO_WINDOW)
+            .arg(temp_script.path())
+            .creation_flags(CREATE_NO_WINDOW.0)
             .spawn();
 
         if res.is_ok() {

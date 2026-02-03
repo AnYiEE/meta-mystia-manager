@@ -5,9 +5,7 @@ use std::os::windows::process::CommandExt;
 use std::process::Command;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
-use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-
-const CREATE_NO_WINDOW: u32 = 0x08000000;
+use windows::Win32::System::Threading::{CREATE_NO_WINDOW, GetCurrentProcess, OpenProcessToken};
 
 struct TokenHandle(HANDLE);
 
@@ -26,6 +24,20 @@ impl Drop for TokenHandle {
         unsafe {
             let _ = CloseHandle(self.0);
         }
+    }
+}
+
+struct TempScript(std::path::PathBuf);
+
+impl TempScript {
+    fn new(path: std::path::PathBuf) -> Self {
+        Self(path)
+    }
+}
+
+impl Drop for TempScript {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
     }
 }
 
@@ -84,6 +96,8 @@ pub fn elevate_and_restart() -> Result<()> {
         ))
     })?;
 
+    let _temp_script = TempScript::new(script_path.clone());
+
     // 尝试优先使用 pwsh（PowerShell Core），若不可用再回退到 powershell.exe
     let shells = ["pwsh.exe", "powershell.exe"];
 
@@ -94,7 +108,7 @@ pub fn elevate_and_restart() -> Result<()> {
             .arg("Bypass")
             .arg("-File")
             .arg(&script_path)
-            .creation_flags(CREATE_NO_WINDOW)
+            .creation_flags(CREATE_NO_WINDOW.0)
             .spawn();
 
         if res.is_ok() {
