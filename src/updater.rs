@@ -10,24 +10,6 @@ use std::path::Path;
 use std::process::Command;
 use windows::Win32::System::Threading::CREATE_NO_WINDOW;
 
-struct TempScript(std::path::PathBuf);
-
-impl TempScript {
-    fn new(path: std::path::PathBuf) -> Self {
-        Self(path)
-    }
-
-    fn path(&self) -> &std::path::Path {
-        &self.0
-    }
-}
-
-impl Drop for TempScript {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-    }
-}
-
 pub fn perform_self_update(
     game_root: &Path,
     ui: &dyn Ui,
@@ -67,7 +49,11 @@ pub fn perform_self_update(
     }
 
     // 3. 生成升级脚本
-    let script_name = format!("meta_mystia_update_{}.ps1", std::process::id());
+    let script_name = format!(
+        "{}-updater_{}.ps1",
+        env!("CARGO_PKG_NAME"),
+        std::process::id()
+    );
     let script_path = std::env::temp_dir().join(&script_name);
 
     let script = generate_powershell_script(
@@ -84,8 +70,7 @@ pub fn perform_self_update(
         ))
     })?;
 
-    let temp_script = TempScript::new(script_path.clone());
-    if !temp_script.path().exists() {
+    if !script_path.exists() {
         report_event(
             "SelfUpdate.Failed.ScriptMissing",
             Some(&script_path.display().to_string()),
@@ -106,7 +91,7 @@ pub fn perform_self_update(
             .arg("-ExecutionPolicy")
             .arg("Bypass")
             .arg("-File")
-            .arg(temp_script.path())
+            .arg(&script_path)
             .creation_flags(CREATE_NO_WINDOW.0)
             .spawn();
 
