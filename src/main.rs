@@ -1,3 +1,5 @@
+mod cli;
+mod cli_ui;
 mod config;
 mod console_ui;
 mod downloader;
@@ -17,6 +19,8 @@ mod uninstaller;
 mod updater;
 mod upgrader;
 
+use crate::cli::{Cli, CliConfig, CliOperation, InstallConfig};
+use crate::cli_ui::CliUI;
 use crate::config::{GAME_EXECUTABLE, OperationMode, UninstallMode};
 use crate::console_ui::ConsoleUI;
 use crate::downloader::Downloader;
@@ -30,24 +34,45 @@ use crate::uninstaller::Uninstaller;
 use crate::updater::perform_self_update;
 use crate::upgrader::Upgrader;
 
+use clap::Parser;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    let console_ui = ConsoleUI::new();
+    let cli_args = Cli::parse();
+    let cli_config = cli_args.to_config();
 
     if !cfg!(windows) {
-        let _ = console_ui.error("错误：仅支持 Windows 平台");
-        console_ui.wait_for_key().ok();
-        return ExitCode::from(1);
+        if let Some(ref config) = cli_config {
+            let cli_ui = CliUI::new(config.quiet);
+            let _ = cli_ui.error("Windows platform is required");
+            return ExitCode::from(1);
+        } else {
+            let console_ui = ConsoleUI::new();
+            let _ = console_ui.error("错误：仅支持 Windows 平台");
+            console_ui.wait_for_key().ok();
+            return ExitCode::from(1);
+        }
     }
 
-    let res = match run(&console_ui) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            let _ = console_ui.error(&format!("错误：{}", e));
-            console_ui.wait_for_key().ok();
-            ExitCode::from(1)
+    let res = if let Some(ref config) = cli_config {
+        let cli_ui = CliUI::new(config.quiet);
+        match run_with_cli(&cli_ui, config) {
+            Ok(exit_code) => ExitCode::from(exit_code),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                ExitCode::from(1)
+            }
+        }
+    } else {
+        let console_ui = ConsoleUI::new();
+        match run(&console_ui) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                let _ = console_ui.error(&format!("错误：{}", e));
+                console_ui.wait_for_key().ok();
+                ExitCode::from(1)
+            }
         }
     };
 
@@ -86,8 +111,8 @@ fn run(ui: &dyn Ui) -> Result<()> {
         if current_version != vi.manager
             && ui.manager_ask_self_update(current_version, &vi.manager)?
         {
-            match perform_self_update(&std::env::current_dir()?, ui, downloader, vi) {
-                Ok(()) => {
+            match perform_self_update(&std::env::current_dir()?, ui, downloader, vi, true) {
+                Ok(_) => {
                     run_shutdown();
                     std::process::exit(0);
                 }
@@ -132,7 +157,97 @@ fn run(ui: &dyn Ui) -> Result<()> {
     }
 }
 
-fn run_install(game_root: PathBuf, ui: &dyn Ui) -> Result<()> {
+fn run_with_cli(ui: &dyn Ui, config: &CliConfig) -> Result<u8> {
+    report_event("Run.CLI", Some(env!("CARGO_PKG_VERSION")));
+
+    let skip_network = matches!(config.operation, CliOperation::Uninstall(_));
+
+    let mut version_info = None;
+    let downloader = if !skip_network {
+        let dl = Downloader::new(ui)?;
+        let vi = dl.get_version_info()?;
+        version_info = Some(vi);
+        Some(dl)
+    } else {
+        None
+    };
+
+    ui.display_version(version_info.as_ref().map(|vi| vi.manager.as_str()))?;
+
+    // 执行自更新
+    if !skip_network
+        && !config.skip_self_update
+        && let (Some(downloader), Some(vi)) = (&downloader, &version_info)
+    {
+        let current_version = env!("CARGO_PKG_VERSION");
+        if current_version != vi.manager {
+            match perform_self_update(&std::env::current_dir()?, ui, downloader, vi, false) {
+                Ok(filename) => {
+                    ui.message(&filename)?;
+                    run_shutdown();
+                    return Ok(100);
+                }
+                Err(e) => ui.manager_update_failed(&format!("{}", e))?,
+            }
+        }
+    }
+
+    // 1. 目录环境检查
+    let game_root = if let Some(path) = &config.game_path {
+        if !path.exists() {
+            return Err(ManagerError::Other(format!(
+                "Path does not exist: {}",
+                path.display()
+            )));
+        }
+        if !path.join(GAME_EXECUTABLE).exists() {
+            return Err(ManagerError::Other(format!(
+                "Game executable {} not found in {}",
+                GAME_EXECUTABLE,
+                path.display()
+            )));
+        }
+        path.clone()
+    } else {
+        match check_game_directory(ui) {
+            Ok(path) => path,
+            Err(e) => {
+                ui.message(&format!(
+                    "Current directory: {}",
+                    std::env::current_dir()?.display()
+                ))?;
+                ui.message(&format!(
+                    "Please run this program in the game root directory (containing {}) or use --path to specify the directory.",
+                    GAME_EXECUTABLE
+                ))?;
+                return Err(e);
+            }
+        }
+    };
+
+    // 2. 游戏进程检查
+    if check_game_running()? {
+        ui.display_game_running_warning()?;
+        return Err(ManagerError::GameRunning);
+    }
+
+    // 3. 执行操作
+    match &config.operation {
+        CliOperation::Install(install_config) => {
+            run_install(game_root, ui, Some(install_config))?;
+        }
+        CliOperation::Upgrade => {
+            run_upgrade(game_root, ui)?;
+        }
+        CliOperation::Uninstall(mode) => {
+            run_uninstall(game_root, ui, Some(*mode))?;
+        }
+    }
+
+    Ok(0)
+}
+
+fn run_install(game_root: PathBuf, ui: &dyn Ui, config: Option<&InstallConfig>) -> Result<()> {
     // 创建安装器
     let installer = Installer::new(game_root, ui)?;
 
@@ -156,7 +271,7 @@ fn run_install(game_root: PathBuf, ui: &dyn Ui) -> Result<()> {
     }
 
     // 执行安装
-    installer.install(has_installed)?;
+    installer.install(has_installed, config)?;
 
     ui.wait_for_key()?;
     Ok(())
@@ -173,12 +288,12 @@ fn run_upgrade(game_root: PathBuf, ui: &dyn Ui) -> Result<()> {
     Ok(())
 }
 
-fn run_uninstall(game_root: PathBuf, ui: &dyn Ui) -> Result<()> {
+fn run_uninstall(game_root: PathBuf, ui: &dyn Ui, mode: Option<UninstallMode>) -> Result<()> {
     // 创建卸载器
     let uninstaller = Uninstaller::new(game_root, ui)?;
 
     // 执行卸载
-    uninstaller.uninstall()?;
+    uninstaller.uninstall(mode)?;
 
     ui.wait_for_key()?;
     Ok(())

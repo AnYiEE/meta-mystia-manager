@@ -15,7 +15,8 @@ pub fn perform_self_update(
     ui: &dyn Ui,
     downloader: &Downloader,
     version_info: &VersionInfo,
-) -> Result<()> {
+    auto_launch: bool,
+) -> Result<String> {
     report_event("SelfUpdate.Start", Some(&version_info.manager));
 
     // 1. 准备临时目录并下载
@@ -60,6 +61,7 @@ pub fn perform_self_update(
         &exe_path.to_string_lossy(),
         &target_path.to_string_lossy(),
         std::process::id(),
+        auto_launch,
     );
 
     std::fs::write(&script_path, script.as_bytes()).map_err(|e| {
@@ -98,7 +100,7 @@ pub fn perform_self_update(
         if res.is_ok() {
             report_event("SelfUpdate.Scheduled", Some(&version_info.manager));
             ui.manager_update_starting()?;
-            return Ok(());
+            return Ok(filename);
         }
     }
 
@@ -106,7 +108,23 @@ pub fn perform_self_update(
     Err(ManagerError::Other("无法启动 PowerShell".to_string()))
 }
 
-fn generate_powershell_script(target: &str, new_exe: &str, pid: u32) -> String {
+fn generate_powershell_script(target: &str, new_exe: &str, pid: u32, auto_launch: bool) -> String {
+    let launch_script = if auto_launch {
+        r#"
+# 启动新 exe
+try {
+    Start-Process -FilePath $New -WorkingDirectory $targetDir
+} catch {
+    if ($bak -ne $null -and (Test-Path $bak)) {
+        try { Move-Item -Path $bak -Destination $Old -Force -ErrorAction SilentlyContinue } catch {}
+    }
+    exit 1
+}
+"#
+    } else {
+        ""
+    };
+
     format!(
         r#"param(
     [string]$Old = '{target}',
@@ -147,17 +165,7 @@ if (Test-Path $Old) {{
         $bak = $null
     }}
 }}
-
-# 启动新 exe
-try {{
-    Start-Process -FilePath $New -WorkingDirectory $targetDir
-}} catch {{
-    if ($bak -ne $null -and (Test-Path $bak)) {{
-        try {{ Move-Item -Path $bak -Destination $Old -Force -ErrorAction SilentlyContinue }} catch {{}}
-    }}
-    exit 1
-}}
-
+{launch_script}
 # 清理
 Start-Sleep -Seconds 1
 if ($bak -ne $null -and (Test-Path $bak)) {{

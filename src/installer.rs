@@ -1,3 +1,4 @@
+use crate::cli::InstallConfig;
 use crate::config::UninstallMode;
 use crate::downloader::Downloader;
 use crate::error::{ManagerError, Result};
@@ -134,7 +135,11 @@ impl<'a> Installer<'a> {
     }
 
     /// 执行安装流程
-    pub fn install(&self, cleanup_before_deploy: bool) -> Result<()> {
+    pub fn install(
+        &self,
+        cleanup_before_deploy: bool,
+        config: Option<&InstallConfig>,
+    ) -> Result<()> {
         report_event("Install.Start", None);
 
         // 1. 获取版本信息
@@ -159,8 +164,10 @@ impl<'a> Installer<'a> {
         let share_code = self.downloader.get_share_code()?;
         report_event("Install.ShareCode", Some(&share_code));
 
-        // 2.1. 询问是否安装 ResourceEx
-        let install_resourceex = if cleanup_before_deploy {
+        // 2.1. 询问是否安装 ResourceEx（如果 config 存在则使用，否则询问用户）
+        let install_resourceex = if let Some(cfg) = config {
+            cfg.install_resourceex
+        } else if cleanup_before_deploy {
             let resourceex_pattern = self
                 .game_root
                 .join("ResourceEx")
@@ -175,8 +182,12 @@ impl<'a> Installer<'a> {
             self.ui.install_ask_install_resourceex()?
         };
 
-        // 2.2. 询问是否在游戏启动时弹出 BepInEx 控制台窗口
-        let show_bepinex_console = self.ui.install_ask_show_bepinex_console()?;
+        // 2.2. 询问是否在游戏启动时弹出 BepInEx 控制台窗口（如果 config 存在则使用，否则询问用户）
+        let show_bepinex_console = if let Some(cfg) = config {
+            cfg.show_bepinex_console
+        } else {
+            self.ui.install_ask_show_bepinex_console()?
+        };
 
         // 3. 创建临时下载目录
         let (temp_dir, _temp_guard) = create_temp_dir_with_guard(&self.game_root).map_err(|e| {
