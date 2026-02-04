@@ -5,6 +5,7 @@ use crate::error::{ManagerError, Result};
 use crate::extractor::Extractor;
 use crate::file_ops::{atomic_rename_or_copy, count_results, execute_deletion, glob_matches};
 use crate::metrics::report_event;
+use crate::model::VersionInfo;
 use crate::temp_dir::create_temp_dir_with_guard;
 use crate::ui::Ui;
 
@@ -148,17 +149,6 @@ impl<'a> Installer<'a> {
         self.ui.install_display_version_info(&version_info)?;
         report_event("Install.VersionInfo", Some(&version_info.to_string()));
 
-        // 显示 GitHub Release Notes（如有），在用户确认安装前展示并询问是否继续
-        match self.downloader.fetch_and_display_github_release_notes() {
-            Ok(Some(_)) => {
-                if !self.ui.download_ask_continue_after_release_notes()? {
-                    return Err(ManagerError::UserCancelled);
-                }
-            }
-            Ok(None) => {}
-            Err(_) => {}
-        }
-
         // 2. 获取分享码
         self.ui.install_display_step(2, "获取下载链接")?;
         let share_code = self.downloader.get_share_code()?;
@@ -189,6 +179,79 @@ impl<'a> Installer<'a> {
             self.ui.install_ask_show_bepinex_console()?
         };
 
+        // 2.3. 选择 DLL 版本
+        let dll_version = if let Some(cfg) = config
+            && let Some(ref v) = cfg.dll_version
+        {
+            if !version_info.dlls.contains(v) {
+                self.ui
+                    .select_version_not_available("MetaMystia DLL", v, &version_info.dlls)?;
+                return Err(ManagerError::Other(format!(
+                    "Specified MetaMystia DLL version \"{}\" is not available",
+                    v
+                )));
+            }
+            v.clone()
+        } else if self.ui.select_version_ask_select("MetaMystia DLL")? {
+            let idx = self
+                .ui
+                .select_version_from_list("MetaMystia DLL", &version_info.dlls)?;
+            version_info.dlls[idx].clone()
+        } else {
+            version_info.latest_dll().to_string()
+        };
+
+        // 2.4. 选择 ResourceEx 版本（仅在安装时）
+        let resourceex_version = if install_resourceex {
+            if let Some(cfg) = config
+                && let Some(ref v) = cfg.resourceex_version
+            {
+                if !version_info.zips.contains(v) {
+                    self.ui.select_version_not_available(
+                        "ResourceExample ZIP",
+                        v,
+                        &version_info.zips,
+                    )?;
+                    return Err(ManagerError::Other(format!(
+                        "Specified ResourceExample ZIP version \"{}\" is not available",
+                        v
+                    )));
+                }
+                Some(v.clone())
+            } else if self.ui.select_version_ask_select("ResourceExample ZIP")? {
+                let idx = self
+                    .ui
+                    .select_version_from_list("ResourceExample ZIP", &version_info.zips)?;
+                Some(version_info.zips[idx].clone())
+            } else {
+                Some(version_info.latest_resourceex().to_string())
+            }
+        } else {
+            None
+        };
+
+        report_event(
+            "Install.Version.Selected",
+            Some(&format!(
+                "dll={};resourceex={}",
+                dll_version,
+                resourceex_version.as_ref().unwrap_or(&"none".to_string())
+            )),
+        );
+
+        // 显示 GitHub Release Notes（仅当安装最新 DLL 版本时）
+        if dll_version == version_info.latest_dll() {
+            match self.downloader.fetch_and_display_github_release_notes() {
+                Ok(Some(_)) => {
+                    if !self.ui.download_ask_continue_after_release_notes()? {
+                        return Err(ManagerError::UserCancelled);
+                    }
+                }
+                Ok(None) => {}
+                Err(_) => {}
+            }
+        }
+
         // 3. 创建临时下载目录
         let (temp_dir, _temp_guard) = create_temp_dir_with_guard(&self.game_root).map_err(|e| {
             ManagerError::from(std::io::Error::new(
@@ -207,15 +270,16 @@ impl<'a> Installer<'a> {
             .download_bepinex(&version_info, &bepinex_path)?;
 
         // 下载 MetaMystia DLL
-        let dll_path = temp_dir.join(version_info.metamystia_filename());
+        let dll_path = temp_dir.join(VersionInfo::metamystia_filename(&dll_version));
+        let try_github = dll_version == version_info.latest_dll();
         self.downloader
-            .download_metamystia(&share_code, &version_info, &dll_path)?;
+            .download_metamystia(&share_code, &dll_version, &dll_path, try_github)?;
 
         // 下载 ResourceExample ZIP
-        let resourceex_path = if install_resourceex {
-            let path = temp_dir.join(version_info.resourceex_filename());
+        let resourceex_path = if let Some(ref version) = resourceex_version {
+            let path = temp_dir.join(VersionInfo::resourceex_filename(version));
             self.downloader
-                .download_resourceex(&share_code, &version_info, &path)?;
+                .download_resourceex(&share_code, version, &path)?;
             Some(path)
         } else {
             None

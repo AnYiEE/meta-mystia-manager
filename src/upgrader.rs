@@ -179,11 +179,11 @@ impl<'a> Upgrader<'a> {
 
         let dll_needs = dll_opt
             .as_ref()
-            .map(|cur| cur != &version_info.dll)
+            .map(|cur| cur != version_info.latest_dll())
             .unwrap_or(false);
         let res_needs = res_opt
             .as_ref()
-            .map(|cur| cur != &version_info.zip)
+            .map(|cur| cur != version_info.latest_resourceex())
             .unwrap_or(false);
 
         Ok((dll_needs, res_needs))
@@ -227,15 +227,15 @@ impl<'a> Upgrader<'a> {
         report_event("Upgrade.VersionInfo", Some(&version_info.to_string()));
 
         // 检查 MetaMystia DLL 是否需要升级
-        let new_dll_version = &version_info.dll;
-        let dll_needs_upgrade = current_dll_version != *new_dll_version;
+        let new_dll_version = version_info.latest_dll();
+        let dll_needs_upgrade = current_dll_version != new_dll_version;
         self.ui
             .upgrade_display_current_and_latest_dll(&current_dll_version, new_dll_version)?;
 
         // 检查 ResourceExample ZIP 是否需要升级
-        let new_resourceex_version = &version_info.zip;
+        let new_resourceex_version = version_info.latest_resourceex();
         let resourceex_needs_upgrade =
-            (current_resourceex_version != *new_resourceex_version) && has_resourceex;
+            (current_resourceex_version != new_resourceex_version) && has_resourceex;
         if has_resourceex {
             self.ui.upgrade_display_current_and_latest_resourceex(
                 &current_resourceex_version,
@@ -291,11 +291,11 @@ impl<'a> Upgrader<'a> {
 
         // 下载 DLL（仅当需要升级时）
         let temp_dll_path = if dll_needs_upgrade {
-            let new_dll_filename = version_info.metamystia_filename();
+            let new_dll_filename = VersionInfo::metamystia_filename(new_dll_version);
             let path = temp_dir.join(&new_dll_filename);
 
             self.downloader
-                .download_metamystia(&share_code, &version_info, &path)?;
+                .download_metamystia(&share_code, new_dll_version, &path, true)?;
 
             Some((path, new_dll_filename))
         } else {
@@ -304,13 +304,13 @@ impl<'a> Upgrader<'a> {
 
         // 下载 ResourceExample ZIP（仅当已安装且需要升级时）
         let temp_resourceex_path = if has_resourceex && resourceex_needs_upgrade {
-            let resourceex_filename = version_info.resourceex_filename();
+            let resourceex_filename = VersionInfo::resourceex_filename(new_resourceex_version);
             let path = temp_dir.join(&resourceex_filename);
 
             self.ui.upgrade_downloading_resourceex()?;
 
             self.downloader
-                .download_resourceex(&share_code, &version_info, &path)?;
+                .download_resourceex(&share_code, new_resourceex_version, &path)?;
 
             Some((path, resourceex_filename))
         } else {

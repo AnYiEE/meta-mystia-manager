@@ -106,7 +106,9 @@ impl Ui for CliUI {
     fn install_display_version_info(&self, version_info: &VersionInfo) -> Result<()> {
         self.stdout(&format!(
             "Versions - MetaMystia DLL: {}, ResourceExample ZIP: {}, BepInEx: {}",
-            version_info.dll, version_info.zip, version_info.bep_in_ex
+            version_info.latest_dll(),
+            version_info.latest_resourceex(),
+            version_info.bep_in_ex
         ));
         Ok(())
     }
@@ -456,11 +458,6 @@ impl Ui for CliUI {
         Ok(())
     }
 
-    fn download_resourceex_start(&self) -> Result<()> {
-        self.stdout("Downloading ResourceExample ZIP...");
-        Ok(())
-    }
-
     fn download_bepinex_attempt_primary(&self) -> Result<()> {
         self.stdout("Downloading BepInEx from primary source...");
         Ok(())
@@ -514,6 +511,40 @@ impl Ui for CliUI {
 
     fn manager_prompt_manual_update(&self) -> Result<()> {
         self.stderr("Please update the manager manually.");
+        Ok(())
+    }
+
+    fn select_version_ask_select(&self, _component: &str) -> Result<bool> {
+        Ok(false)
+    }
+
+    fn select_version_from_list(&self, _component: &str, _versions: &[String]) -> Result<usize> {
+        Ok(0)
+    }
+
+    fn select_version_not_available(
+        &self,
+        component: &str,
+        version: &str,
+        available: &[String],
+    ) -> Result<()> {
+        self.stderr(&format!(
+            "Error: {} version \"{}\" is not available",
+            component, version
+        ));
+
+        let display_count = std::cmp::min(10, available.len());
+        let header = if available.len() < 10 {
+            "Available versions:"
+        } else {
+            "Latest 10 available versions:"
+        };
+
+        self.stderr(&format!(
+            "{} {}",
+            header,
+            available[..display_count].join(", ")
+        ));
         Ok(())
     }
 }

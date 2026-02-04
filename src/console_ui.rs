@@ -413,10 +413,6 @@ impl Ui for ConsoleUI {
         download_try_fallback_metamystia()
     }
 
-    fn download_resourceex_start(&self) -> Result<()> {
-        download_resourceex_start()
-    }
-
     fn download_bepinex_attempt_primary(&self) -> Result<()> {
         download_bepinex_attempt_primary()
     }
@@ -454,6 +450,23 @@ impl Ui for ConsoleUI {
 
     fn manager_prompt_manual_update(&self) -> Result<()> {
         manager_prompt_manual_update()
+    }
+
+    fn select_version_ask_select(&self, component: &str) -> Result<bool> {
+        select_version_ask_select(component)
+    }
+
+    fn select_version_from_list(&self, component: &str, versions: &[String]) -> Result<usize> {
+        select_version_from_list(component, versions)
+    }
+
+    fn select_version_not_available(
+        &self,
+        component: &str,
+        version: &str,
+        available: &[String],
+    ) -> Result<()> {
+        select_version_not_available(component, version, available)
     }
 }
 
@@ -615,10 +628,13 @@ fn install_display_step(step: usize, description: &str) -> Result<()> {
 
 fn install_display_version_info(version_info: &VersionInfo) -> Result<()> {
     println!("检测到的最新版本：");
-    println!("  • MetaMystia DLL：{}", style(&version_info.dll).green());
+    println!(
+        "  • MetaMystia DLL：{}",
+        style(version_info.latest_dll()).green()
+    );
     println!(
         "  • ResourceExample ZIP：{}",
-        style(&version_info.zip).green()
+        style(version_info.latest_resourceex()).green()
     );
 
     if let Ok(bep_ver) = version_info.bepinex_version() {
@@ -1125,11 +1141,6 @@ fn download_try_fallback_metamystia() -> Result<()> {
     Ok(())
 }
 
-fn download_resourceex_start() -> Result<()> {
-    println!("下载 ResourceExample ZIP...");
-    Ok(())
-}
-
 fn download_bepinex_attempt_primary() -> Result<()> {
     println!("尝试从 bepinex.dev 下载 BepInEx...");
     Ok(())
@@ -1271,5 +1282,154 @@ fn manager_prompt_manual_update() -> Result<()> {
     println!();
     println!("无法向当前运行目录写入文件，请手动下载并升级管理工具。");
     println!();
+    Ok(())
+}
+
+// ==================== 版本选择相关 UI ====================
+
+fn select_version_ask_select(component: &str) -> Result<bool> {
+    println!();
+
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(format!(" 是否需要安装旧版本的 {}？", component))
+        .default(false)
+        .interact_on_opt(&Term::stdout())?;
+    let choice = confirm.unwrap_or(false);
+
+    report_event(
+        &format!("UI.SelectHistoricalVersion.Choice.{}", component),
+        Some(if choice { "yes" } else { "no" }),
+    );
+
+    Ok(choice)
+}
+
+fn select_version_from_list(component: &str, versions: &[String]) -> Result<usize> {
+    let page_size = 10;
+    let total_pages = versions.len().div_ceil(page_size);
+    let mut current_page = 0;
+
+    loop {
+        println!();
+        println!(
+            "{}",
+            style(format!("可用的 {} 版本：", component)).cyan().bold()
+        );
+        println!();
+
+        let start = current_page * page_size;
+        let end = std::cmp::min(start + page_size, versions.len());
+
+        for (i, v) in versions[start..end].iter().enumerate() {
+            let global_index = start + i;
+            if global_index == 0 {
+                println!(
+                    "  {} {}（最新版）",
+                    style(format!("[{}]", i + 1)).green(),
+                    v
+                );
+            } else {
+                println!("  {} {}", style(format!("[{}]", i + 1)).green(), v);
+            }
+        }
+
+        println!();
+
+        if total_pages > 1 {
+            let mut nav_hints = Vec::new();
+            if current_page > 0 {
+                nav_hints.push(format!("{} 上一页", style("[P]").green()));
+            }
+            if current_page < total_pages - 1 {
+                nav_hints.push(format!("{} 下一页", style("[N]").green()));
+            }
+            if !nav_hints.is_empty() {
+                print!("  {}", nav_hints.join("  "));
+            }
+            println!(
+                "  {}",
+                style(format!("（第 {}/{} 页）", current_page + 1, total_pages)).dim()
+            );
+            println!();
+        }
+
+        let current_page_count = end - start;
+        let input: String = Input::with_theme(&ColorfulTheme::default())
+            .with_prompt(format!(
+                " 请选择版本编号（1-{}）{}",
+                current_page_count,
+                if total_pages > 1 {
+                    "，或输入 P（上一页）/ N（下一页）翻页"
+                } else {
+                    ""
+                }
+            ))
+            .interact_text()?;
+
+        let trimmed = input.trim().to_lowercase();
+        if trimmed == "n" || trimmed == "next" {
+            current_page = (current_page + 1) % total_pages;
+            continue;
+        }
+        if trimmed == "p" || trimmed == "prev" || trimmed == "previous" {
+            current_page = if current_page == 0 {
+                total_pages - 1
+            } else {
+                current_page - 1
+            };
+            continue;
+        }
+
+        match trimmed.parse::<usize>() {
+            Ok(num) if num >= 1 && num <= current_page_count => {
+                let index = start + num - 1;
+                report_event(
+                    "UI.SelectHistoricalVersion.Selected",
+                    Some(&versions[index]),
+                );
+                return Ok(index);
+            }
+            _ => {
+                println!();
+                println!(
+                    "{}",
+                    style(format!(
+                        "无效的输入，请输入 1 到 {} 之间的数字{}",
+                        current_page_count,
+                        if total_pages > 1 {
+                            "，或输入 P（上一页）/ N（下一页）翻页"
+                        } else {
+                            ""
+                        }
+                    ))
+                    .yellow()
+                );
+                continue;
+            }
+        }
+    }
+}
+
+fn select_version_not_available(
+    component: &str,
+    version: &str,
+    available: &[String],
+) -> Result<()> {
+    println!();
+    println!(
+        "{}",
+        style(format!("错误：{} 版本 {} 不可用", component, version)).red()
+    );
+
+    let display_count = std::cmp::min(10, available.len());
+    let header = if available.len() < 10 {
+        "可用版本："
+    } else {
+        "最新 10 个可用版本："
+    };
+
+    println!("{}{}", header, available[..display_count].join("、"));
+    println!();
+
     Ok(())
 }

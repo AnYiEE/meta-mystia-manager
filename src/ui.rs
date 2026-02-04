@@ -128,7 +128,6 @@ pub trait Ui: Send + Sync {
     fn download_ask_continue_after_release_notes(&self) -> Result<bool>;
     fn download_switch_to_fallback(&self, reason: &str) -> Result<()>;
     fn download_try_fallback_metamystia(&self) -> Result<()>;
-    fn download_resourceex_start(&self) -> Result<()>;
     fn download_bepinex_attempt_primary(&self) -> Result<()>;
     fn download_bepinex_primary_failed(&self, err: &str) -> Result<()>;
 
@@ -148,4 +147,14 @@ pub trait Ui: Send + Sync {
     fn manager_update_starting(&self) -> Result<()>;
     fn manager_update_failed(&self, err: &str) -> Result<()>;
     fn manager_prompt_manual_update(&self) -> Result<()>;
+
+    // 版本选择相关
+    fn select_version_ask_select(&self, component: &str) -> Result<bool>;
+    fn select_version_from_list(&self, component: &str, versions: &[String]) -> Result<usize>;
+    fn select_version_not_available(
+        &self,
+        component: &str,
+        version: &str,
+        available: &[String],
+    ) -> Result<()>;
 }
