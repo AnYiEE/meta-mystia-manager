@@ -141,6 +141,8 @@ impl<'a> Downloader<'a> {
             ManagerError::Other(format!("解析版本信息失败：{}", e))
         })?;
 
+        vi.validate()?;
+
         self.ui.download_version_info_success()?;
         report_event("Download.VersionInfo.Success", Some(&vi.to_string()));
 
@@ -426,10 +428,30 @@ impl<'a> Downloader<'a> {
     pub fn download_metamystia(
         &self,
         share_code: &str,
-        version_info: &VersionInfo,
+        version: &str,
         dest: &Path,
+        try_github: bool,
     ) -> Result<()> {
-        report_event("Download.Metamystia.Start", Some(&version_info.dll));
+        report_event("Download.Metamystia.Start", Some(version));
+
+        if !try_github {
+            let filename = VersionInfo::metamystia_filename(version);
+            let url = Self::file_api_url(share_code, &filename);
+
+            return match self.download_file_with_progress(&url, dest, None, true) {
+                Ok(()) => {
+                    report_event("Download.Metamystia.Success.Fallback", Some(version));
+                    Ok(())
+                }
+                Err(e) => {
+                    report_event(
+                        "Download.Metamystia.Failed.Fallback",
+                        Some(&format!("{}", e)),
+                    );
+                    Err(e)
+                }
+            };
+        }
 
         match self.get_dll_download_url_from_github() {
             Ok(url) => {
@@ -441,15 +463,12 @@ impl<'a> Downloader<'a> {
                     self.ui.download_try_fallback_metamystia()?;
                     report_event("Download.Metamystia.Failed.GitHub", Some(&format!("{}", e)));
 
-                    let filename = version_info.metamystia_filename();
+                    let filename = VersionInfo::metamystia_filename(version);
                     let fallback_url = Self::file_api_url(share_code, &filename);
 
                     match self.download_file_with_progress(&fallback_url, dest, None, true) {
                         Ok(()) => {
-                            report_event(
-                                "Download.Metamystia.Success.Fallback",
-                                Some(&version_info.dll),
-                            );
+                            report_event("Download.Metamystia.Success.Fallback", Some(version));
                             Ok(())
                         }
                         Err(e) => {
@@ -461,10 +480,7 @@ impl<'a> Downloader<'a> {
                         }
                     }
                 } else {
-                    report_event(
-                        "Download.Metamystia.Success.GitHub",
-                        Some(&version_info.dll),
-                    );
+                    report_event("Download.Metamystia.Success.GitHub", Some(version));
                     Ok(())
                 }
             }
@@ -475,15 +491,12 @@ impl<'a> Downloader<'a> {
                 self.ui.download_try_fallback_metamystia()?;
                 report_event("Download.Metamystia.GitHubUrlFailed", None);
 
-                let filename = version_info.metamystia_filename();
+                let filename = VersionInfo::metamystia_filename(version);
                 let url = Self::file_api_url(share_code, &filename);
 
                 match self.download_file_with_progress(&url, dest, None, true) {
                     Ok(()) => {
-                        report_event(
-                            "Download.Metamystia.Success.Fallback",
-                            Some(&version_info.dll),
-                        );
+                        report_event("Download.Metamystia.Success.Fallback", Some(version));
                         Ok(())
                     }
                     Err(e) => {
@@ -499,21 +512,15 @@ impl<'a> Downloader<'a> {
     }
 
     /// 下载 ResourceExample ZIP
-    pub fn download_resourceex(
-        &self,
-        share_code: &str,
-        version_info: &VersionInfo,
-        dest: &Path,
-    ) -> Result<()> {
-        self.ui.download_resourceex_start()?;
-        report_event("Download.ResourceEx.Start", Some(&version_info.zip));
+    pub fn download_resourceex(&self, share_code: &str, version: &str, dest: &Path) -> Result<()> {
+        report_event("Download.ResourceEx.Start", Some(version));
 
-        let filename = version_info.resourceex_filename();
+        let filename = VersionInfo::resourceex_filename(version);
         let url = Self::file_api_url(share_code, &filename);
 
         match self.download_file_with_progress(&url, dest, None, true) {
             Ok(()) => {
-                report_event("Download.ResourceEx.Success", Some(&version_info.zip));
+                report_event("Download.ResourceEx.Success", Some(version));
                 Ok(())
             }
             Err(e) => {

@@ -8,11 +8,34 @@ pub struct VersionInfo {
     #[serde(rename = "bepInEx")]
     pub bep_in_ex: String,
     pub manager: String,
-    pub dll: String,
-    pub zip: String,
+    pub dlls: Vec<String>,
+    pub zips: Vec<String>,
 }
 
 impl VersionInfo {
+    /// 验证版本信息
+    pub fn validate(&self) -> Result<()> {
+        if self.dlls.is_empty() {
+            report_event("Model.VersionInfo.Invalid", Some("dlls_empty"));
+            return Err(ManagerError::InvalidVersionInfo);
+        }
+        if self.zips.is_empty() {
+            report_event("Model.VersionInfo.Invalid", Some("zips_empty"));
+            return Err(ManagerError::InvalidVersionInfo);
+        }
+        Ok(())
+    }
+
+    /// 获取最新的 DLL 版本
+    pub fn latest_dll(&self) -> &str {
+        &self.dlls[0]
+    }
+
+    /// 获取最新的 ResourceEx 版本
+    pub fn latest_resourceex(&self) -> &str {
+        &self.zips[0]
+    }
+
     /// 解析 BepInEx 的文件名
     pub fn bepinex_filename(&self) -> Result<&str> {
         self.bep_in_ex
@@ -38,13 +61,13 @@ impl VersionInfo {
     }
 
     /// MetaMystia DLL 文件名
-    pub fn metamystia_filename(&self) -> String {
-        format!("MetaMystia-v{}.dll", self.dll.trim())
+    pub fn metamystia_filename(version: &str) -> String {
+        format!("MetaMystia-v{}.dll", version.trim())
     }
 
     /// ResourceExample ZIP 文件名
-    pub fn resourceex_filename(&self) -> String {
-        format!("ResourceExample-v{}.zip", self.zip.trim())
+    pub fn resourceex_filename(version: &str) -> String {
+        format!("ResourceExample-v{}.zip", version.trim())
     }
 
     /// MetaMystia Manager 可执行文件名
@@ -59,8 +82,8 @@ impl std::fmt::Display for VersionInfo {
             f,
             "BepInEx: {}, dll: {}, zip: {}",
             self.bep_in_ex.trim(),
-            self.dll.trim(),
-            self.zip.trim()
+            self.dlls.first().map(|s| s.trim()).unwrap_or(""),
+            self.zips.first().map(|s| s.trim()).unwrap_or("")
         )
     }
 }

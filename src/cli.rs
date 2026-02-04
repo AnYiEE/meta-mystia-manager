@@ -37,6 +37,18 @@ pub struct Cli {
     #[arg(long = "with-bepinex-console", requires = "install")]
     pub with_bepinex_console: bool,
 
+    /// Specify the MetaMystia DLL version to install.
+    #[arg(long = "dll-version", value_name = "VERSION", requires = "install")]
+    pub dll_version: Option<String>,
+
+    /// Specify the ResourceExample version to install.
+    #[arg(
+        long = "resourceex-version",
+        value_name = "VERSION",
+        requires = "install"
+    )]
+    pub resourceex_version: Option<String>,
+
     /// Upgrade MetaMystia Mod.
     #[arg(short = 'u', long)]
     pub upgrade: bool,
@@ -71,6 +83,8 @@ impl From<UninstallModeArg> for UninstallMode {
 pub struct InstallConfig {
     pub install_resourceex: bool,
     pub show_bepinex_console: bool,
+    pub dll_version: Option<String>,
+    pub resourceex_version: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -95,6 +109,8 @@ impl Cli {
             Some(CliOperation::Install(InstallConfig {
                 install_resourceex: !self.no_resourceex,
                 show_bepinex_console: self.with_bepinex_console,
+                dll_version: self.dll_version.clone(),
+                resourceex_version: self.resourceex_version.clone(),
             }))
         } else if self.upgrade {
             Some(CliOperation::Upgrade)
