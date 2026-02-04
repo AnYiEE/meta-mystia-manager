@@ -1,4 +1,5 @@
 mod config;
+mod console_ui;
 mod downloader;
 mod env_check;
 mod error;
@@ -16,15 +17,15 @@ mod uninstaller;
 mod updater;
 mod upgrader;
 
-use crate::config::GAME_EXECUTABLE;
+use crate::config::{GAME_EXECUTABLE, OperationMode, UninstallMode};
+use crate::console_ui::ConsoleUI;
 use crate::downloader::Downloader;
 use crate::env_check::{check_game_directory, check_game_running};
 use crate::error::{ManagerError, Result};
 use crate::installer::Installer;
 use crate::metrics::report_event;
 use crate::shutdown::run_shutdown;
-use crate::ui::OperationMode::*;
-use crate::ui::{ConsoleUI, Ui};
+use crate::ui::Ui;
 use crate::uninstaller::Uninstaller;
 use crate::updater::perform_self_update;
 use crate::upgrader::Upgrader;
@@ -125,9 +126,9 @@ fn run(ui: &dyn Ui) -> Result<()> {
     // 5. 选择操作模式
     let operation = ui.select_operation_mode()?;
     match operation {
-        Install => run_install(game_root.clone(), ui),
-        Upgrade => run_upgrade(game_root.clone(), ui),
-        Uninstall => run_uninstall(game_root.clone(), ui),
+        OperationMode::Install => run_install(game_root.clone(), ui, None),
+        OperationMode::Upgrade => run_upgrade(game_root.clone(), ui),
+        OperationMode::Uninstall => run_uninstall(game_root.clone(), ui, None),
     }
 }
 

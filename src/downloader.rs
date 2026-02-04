@@ -222,7 +222,7 @@ impl<'a> Downloader<'a> {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| dest.display().to_string());
 
-        let id = self.ui.download_start(&filename, total_size);
+        let id = self.ui.download_start(&filename, total_size)?;
 
         self.write_response_to_file(&mut response, dest, id, rate_limit)
     }
@@ -281,7 +281,7 @@ impl<'a> Downloader<'a> {
             })?;
             downloaded += n as u64;
 
-            self.ui.download_update(id, downloaded);
+            self.ui.download_update(id, downloaded)?;
 
             if rate_limit {
                 let expected_secs = (downloaded as f64) / (RATE_LIMIT as f64);
@@ -317,7 +317,7 @@ impl<'a> Downloader<'a> {
                             .map(|n| n.to_string_lossy().into_owned())
                             .unwrap_or_else(|| dest.display().to_string())
                     ),
-                );
+                )?;
                 Ok(())
             }
             Err(e) => {
@@ -543,10 +543,12 @@ impl<'a> Downloader<'a> {
         match primary_result {
             Ok(mut resp) => {
                 let total_size = resp.content_length();
-                let id = self.ui.download_start("BepInEx（bepinex.dev）", total_size);
+                let id = self
+                    .ui
+                    .download_start("BepInEx（bepinex.dev）", total_size)?;
 
                 if let Err(e) = self.write_response_to_file(&mut resp, dest, id, false) {
-                    self.ui.download_finish(id, "从 bepinex.dev 下载失败");
+                    self.ui.download_finish(id, "从 bepinex.dev 下载失败")?;
                     self.ui.download_bepinex_primary_failed(&format!(
                         "从 bepinex.dev 下载失败 ({}), 切换到备用源...",
                         e

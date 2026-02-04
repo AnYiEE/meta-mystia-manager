@@ -175,7 +175,7 @@ impl<'a> Uninstaller<'a> {
 
         // 8. 显示操作摘要
         let (success, failed, skipped) = count_results(&all_results);
-        self.ui.deletion_display_summary(success, failed, skipped);
+        self.ui.deletion_display_summary(success, failed, skipped)?;
         report_event(
             "Uninstall.Finished",
             Some(&format!(

@@ -138,9 +138,9 @@ impl<'a> Installer<'a> {
         report_event("Install.Start", None);
 
         // 1. 获取版本信息
-        self.ui.install_display_step(1, "获取版本信息");
+        self.ui.install_display_step(1, "获取版本信息")?;
         let version_info = self.downloader.get_version_info()?;
-        self.ui.install_display_version_info(&version_info);
+        self.ui.install_display_version_info(&version_info)?;
         report_event("Install.VersionInfo", Some(&version_info.to_string()));
 
         // 显示 GitHub Release Notes（如有），在用户确认安装前展示并询问是否继续
@@ -155,7 +155,7 @@ impl<'a> Installer<'a> {
         }
 
         // 2. 获取分享码
-        self.ui.install_display_step(2, "获取下载链接");
+        self.ui.install_display_step(2, "获取下载链接")?;
         let share_code = self.downloader.get_share_code()?;
         report_event("Install.ShareCode", Some(&share_code));
 
@@ -187,7 +187,7 @@ impl<'a> Installer<'a> {
         })?;
 
         // 4. 下载文件
-        self.ui.install_display_step(3, "下载必要文件");
+        self.ui.install_display_step(3, "下载必要文件")?;
 
         // 下载 BepInEx
         let bepinex_path = temp_dir.join(version_info.bepinex_filename()?);
@@ -224,7 +224,7 @@ impl<'a> Installer<'a> {
         }
 
         // 6. 安装文件
-        self.ui.install_display_step(4, "安装文件");
+        self.ui.install_display_step(4, "安装文件")?;
 
         // 检查 BepInEx 是否存在（用于决定是否跳过 plugins）
         let bepinex_dir = self.game_root.join("BepInEx");

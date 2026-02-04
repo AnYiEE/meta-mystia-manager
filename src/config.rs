@@ -7,6 +7,15 @@ pub const USER_AGENT: &str = concat!(
     " (+https://github.com/AnYiEE/meta-mystia-manager)"
 );
 
+/// 操作模式枚举
+pub enum OperationMode {
+    Install,
+    Upgrade,
+    Uninstall,
+}
+
+/// 卸载模式枚举
+#[derive(Clone, Copy, Debug)]
 pub enum UninstallMode {
     Light,
     Full,
