@@ -18,7 +18,7 @@ where
     for attempt in 0..cfg.attempts {
         match f() {
             Ok(v) => return Ok(v),
-            Err(e) if attempt < cfg.attempts - 1 => {
+            Err(e) => {
                 let raw = (cfg.base_delay_secs as f64) * cfg.multiplier.powi(attempt as i32);
                 let delay_secs = raw.min(cfg.max_delay_secs as f64).ceil() as u64;
 
@@ -39,11 +39,12 @@ where
                     )),
                 );
 
-                sleep(Duration::from_secs(delay_secs));
-            }
-            Err(e) => {
-                report_event("Network.RetryFailed", Some(op_desc));
-                return Err(e);
+                if attempt < cfg.attempts - 1 {
+                    sleep(Duration::from_secs(delay_secs));
+                } else {
+                    report_event("Network.RetryFailed", Some(op_desc));
+                    return Err(e);
+                }
             }
         }
     }

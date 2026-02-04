@@ -3,6 +3,7 @@ use crate::error::ManagerError;
 use crate::error::Result;
 use crate::metrics::{get_user_id, report_event};
 use crate::model::VersionInfo;
+
 use console::{Term, style};
 use dialoguer::{Confirm, Input, theme::ColorfulTheme};
 use indicatif::{ProgressBar, ProgressStyle};

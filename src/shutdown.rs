@@ -80,6 +80,8 @@ pub fn run_shutdown() {
         return;
     }
 
+    metrics::report_event("Shutdown", None);
+
     let to = SHUTDOWN_TIMEOUT;
     let callbacks: Vec<CleanupCallback> = if let Some(m) = CALLBACKS.get() {
         let mut guard = match m.lock() {
